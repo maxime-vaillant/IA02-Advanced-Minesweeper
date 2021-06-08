@@ -27,13 +27,15 @@ class Game:
         self.board = []
         self.file = filename
         self.cmd = None
+        self.width = width
+        self.height = height
         if platform == 'darwin':
             self.cmd = "./gophersat-1.1.6-MacOS"
         elif platform == 'win32':
             self.cmd = "./gophersat-1.1.6-Windows"
         elif platform == 'linux':
             self.cmd = "./gophersat-1.1.6-Linux"
-        self.create_game_constraints(width, height)
+        self.create_game_constraints()
 
     def make_decision(self, data_received) -> Tuple[int, int, str]:
         """
@@ -87,7 +89,7 @@ class Game:
         :param cell:
         :return:
         """
-        return cell[0] + cell[1] + values_variables(cell[2])
+        return cell[0] + cell[1]*self.width + values_variables(cell[2])
 
     def variable_to_cell(self, var: int) -> Tuple[int, int, str]:
         """
@@ -95,7 +97,8 @@ class Game:
         :param var: variable
         :return: cell
         """
-        return
+        case = var // len(values)
+        return [case % self.width, case//self.width, var%len(values)]
 
     def at_least_one(self, vars: List[int]) -> List[int]:
         return vars[:]
@@ -112,7 +115,7 @@ class Game:
             clauses.append([i, j])
         return clauses
 
-    def create_game_constraints(self, w: int, h: int):
+    def create_game_constraints(self):
         """
         Init the clauses
         :param w: width of the board
@@ -123,8 +126,8 @@ class Game:
 
         # TODO create clauses
 
-        for x in range(w):
-            for y in range (h):
+        for x in range(self.width):
+            for y in range (self.height):
                 for value in values:
                     var.append([x, y, value])
 
@@ -133,7 +136,7 @@ class Game:
 
         clauses = self.unique(clauses)
 
-        self.write_dimacs_file(self.clauses_to_dimacs(clauses, 6*w*h))
+        self.write_dimacs_file(self.clauses_to_dimacs(clauses, 6*self.width*self.height))
 
     def clauses_to_dimacs(self, clauses: List[List[int]], nb_vars: int) -> str:
         """
