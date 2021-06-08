@@ -9,7 +9,9 @@ from Game import Game
 def main():
     # TODO Get first values from the api
 
-    game = Game(2,2)
+    game = Game(4, 4)
+
+    print(game.create_animals_constraints())
 
     end = False
 

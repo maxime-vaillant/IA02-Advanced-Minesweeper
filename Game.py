@@ -3,15 +3,17 @@ from sys import platform
 from typing import List, Tuple
 import itertools
 
-values = ["Tiger", "Crocodile", "Shark", "Water", "Free", "Unknown"]
-values_variables = {
-    "Unknown": 1,
-    "Free": 2,
-    "Tiger":3,
-    "Crocodile": 4,
-    "Shark": 5,
-    "Free": 6
+# U: Unknown, F: Free, T: Tiger, C: Crocodile, S: Shark, W: Water
+values_list = ["U", "F", "T", "C", "S", "W"]
+values_dict = {
+    "U": 1,
+    "F": 2,
+    "T": 3,
+    "C": 4,
+    "S": 5,
+    "W": 6
 }
+length = len(values_dict)
 
 
 class Game:
@@ -35,7 +37,7 @@ class Game:
             self.cmd = "./gophersat-1.1.6-Windows"
         elif platform == 'linux':
             self.cmd = "./gophersat-1.1.6-Linux"
-        self.create_game_constraints()
+        #self.create_game_constraints()
 
     def make_decision(self, data_received) -> Tuple[int, int, str]:
         """
@@ -75,7 +77,7 @@ class Game:
             print("Votre système d'exploitation n'est pas compatible")
             return False, []
 
-    def write_dimacs_file(self, dimacs:str):
+    def write_dimacs_file(self, dimacs: str):
         """
         Write into the cnf file the new clauses
         :param dimacs: new clauses
@@ -83,27 +85,31 @@ class Game:
         with open(self.file, "w", newline="") as cnf:
             cnf.write(dimacs)
 
-    def cell_to_variable(self, cell: Tuple[int, int, str]):
+    def cell_to_variable(self, i: int, j: int, val: str) -> int:
         """
         Transform a cell representation to a variable
-        :param cell:
-        :return:
+        :param i:
+        :param j:
+        :param val:
+        :return variable
         """
-        return cell[0] + cell[1]*self.width + values_variables(cell[2])
+        return i * self.width * length + j * length + values_dict[val]
 
     def variable_to_cell(self, var: int) -> Tuple[int, int, str]:
         """
         Change a variable to his cell value
         :param var: variable
-        :return: cell
+        :return cell
         """
-        case = var // len(values)
-        return [case % self.width, case//self.width, var%len(values)]
+        i, rest = var // (self.width * length), var % (self.width * length)
+        j, rest = rest // length, rest % length
+        val = values_list[rest-1]
+        return i, j, val
 
     def at_least_one(self, vars: List[int]) -> List[int]:
         return vars[:]
 
-    def unique(self, vars: List[List[int]]) -> List[List[int]]:
+    def unique(self, vars: List[int]) -> List[List[int]]:
         """
         Take a list of clauses and remove all duplicates ones
         :param vars: in clauses list
@@ -115,28 +121,37 @@ class Game:
             clauses.append([i, j])
         return clauses
 
+    # Création des règles liées aux animaux
+    # On applique les règles pour toutes les cases du démineur
+    # unique: U v F v C v S v T
+    # -T v -W
+    # -S v W
+    def create_animals_constraints(self) -> List[List[int]]:
+        clauses = []
+        for i in range(self.height):
+            for j in range(self.width):
+                cells = []
+                for key in values_dict:
+                    if key != "W":
+                        cells.append(self.cell_to_variable(i, j, key))
+                    if key == "T":
+                        clauses.append([-self.cell_to_variable(i, j, key), -self.cell_to_variable(i, j, "W")])
+                    elif key == "S":
+                        clauses.append([-self.cell_to_variable(i, j, key), self.cell_to_variable(i, j, "W")])
+                clauses += self.unique(cells)
+        return clauses
+
     def create_game_constraints(self):
         """
         Init the clauses
-        :param w: width of the board
-        :param h: height of the board
         """
         clauses = []
-        var = []
+
+        clauses += self.create_animals_constraints()
 
         # TODO create clauses
 
-        for x in range(self.width):
-            for y in range (self.height):
-                for value in values:
-                    var.append([x, y, value])
-
-        for tempVar in var:
-            clauses += tempVar[0]+tempVar[1]+values_variables(tempVar[2])
-
-        clauses = self.unique(clauses)
-
-        self.write_dimacs_file(self.clauses_to_dimacs(clauses, 6*self.width*self.height))
+        self.write_dimacs_file(self.clauses_to_dimacs(clauses, length * self.width * self.height))
 
     def clauses_to_dimacs(self, clauses: List[List[int]], nb_vars: int) -> str:
         """
@@ -145,4 +160,11 @@ class Game:
         :param nb_vars: number vars in the dimacs
         :return: dimacs value
         """
-        return ''
+        end = "0\n"
+        space = " "
+        dimacs = "p cnf " + str(nb_vars) + space + str(len(clauses)) + "\n"
+        for clause in clauses:
+            for atom in clause:
+                dimacs += str(atom) + space
+            dimacs += end
+        return dimacs
