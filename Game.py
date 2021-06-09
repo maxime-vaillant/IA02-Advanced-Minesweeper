@@ -37,7 +37,7 @@ class Game:
             self.cmd = "./gophersat-1.1.6-Windows"
         elif platform == 'linux':
             self.cmd = "./gophersat-1.1.6-Linux"
-        #self.create_game_constraints()
+        self.create_game_constraints()
 
     def make_decision(self, data_received) -> Tuple[int, int, str]:
         """
@@ -134,7 +134,9 @@ class Game:
                 for key in values_dict:
                     if key != "W":
                         cells.append(self.cell_to_variable(i, j, key))
-                    if key == "T":
+                    if key == "U":
+                        clauses.append([self.cell_to_variable(i, j, key)])
+                    elif key == "T":
                         clauses.append([-self.cell_to_variable(i, j, key), -self.cell_to_variable(i, j, "W")])
                     elif key == "S":
                         clauses.append([-self.cell_to_variable(i, j, key), self.cell_to_variable(i, j, "W")])

@@ -11,7 +11,7 @@ def main():
 
     game = Game(4, 4)
 
-    print(game.create_animals_constraints())
+    print(game.exec_gophersat())
 
     end = False
 
