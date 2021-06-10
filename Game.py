@@ -26,11 +26,12 @@ class Game:
         Default constructor
         :param filename: name of the cnf file
         """
-        self.board = []
+        self.board = [[["?", "?", []] for j in range(width)] for i in range(height)]
         self.file = filename
         self.cmd = None
         self.width = width
         self.height = height
+        self.visitedCells = []
         if platform == 'darwin':
             self.cmd = "./gophersat-1.1.6-MacOS"
         elif platform == 'win32':
@@ -149,23 +150,17 @@ class Game:
                     cells.append([a, b])
         return cells
 
-    # Création des règles liées aux animaux
-    # On applique les règles pour toutes les cases du démineur
-    def create_animals_constraints(self) -> List[List[int]]:
+    def create_rule_on_cell(self, i: int, j: int) -> List[List[int]]:
         clauses = []
-        for i in range(self.height):
-            for j in range(self.width):
-                cells = []
-                for key in values_dict:
-                    if key != "W":
-                        cells.append(self.cell_to_variable(i, j, key))
-                    if key == "U":
-                        clauses.append([self.cell_to_variable(i, j, key)])
-                    elif key == "T":
-                        clauses.append([-self.cell_to_variable(i, j, key), -self.cell_to_variable(i, j, "W")])
-                    elif key == "S":
-                        clauses.append([-self.cell_to_variable(i, j, key), self.cell_to_variable(i, j, "W")])
-                clauses += self.exact(cells, 1)
+        cells = []
+        for key in values_dict:
+            if key != "W" and key != "U":
+                cells.append(self.cell_to_variable(i, j, key))
+            elif key == "T":
+                clauses.append([-self.cell_to_variable(i, j, key), -self.cell_to_variable(i, j, "W")])
+            elif key == "S":
+                clauses.append([-self.cell_to_variable(i, j, key), self.cell_to_variable(i, j, "W")])
+        clauses += self.exact(cells, 1)
         return clauses
 
     def add_information_constraints(self, data: Dict) -> List[List[int]]:
@@ -176,6 +171,10 @@ class Game:
         proximity_count = data.get("prox_count", None)
         if proximity_count:
             near_cells = self.getNearCells(pos[0], pos[1])
+            for cell in near_cells:
+                if cell not in self.visitedCells:
+                    self.visitedCells.append(cell)
+                    clauses += self.create_rule_on_cell(pos[0], pos[1])
             animals = ("T", "S", "C")
             total_count = 0
             for index, count in enumerate(proximity_count):
@@ -197,8 +196,6 @@ class Game:
         Init the clauses
         """
         clauses = []
-
-        clauses += self.create_animals_constraints()
 
         # TODO create clauses
 
