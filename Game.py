@@ -1,17 +1,18 @@
 import subprocess
+from pprint import pprint
 from sys import platform
 from typing import List, Tuple, Dict
 import itertools
 
 # U: Unknown, F: Free, T: Tiger, C: Crocodile, S: Shark, W: Water
-values_list = ["U", "F", "T", "C", "S", "W"]
+values_list = ["L", "W", "F", "T", "C", "S"]
 values_dict = {
-    "U": 1,
+    "L": 0,
+    "W": 1,
     "F": 2,
     "T": 3,
     "C": 4,
     "S": 5,
-    "W": 6
 }
 length = len(values_dict)
 
@@ -21,7 +22,7 @@ class Game:
     This class represents a game board
     """
 
-    def __init__(self, width: int, height: int, filename: str = "default.cnf"):
+    def __init__(self, height: int, width: int, tiger_count: int, crocodile_count: int, shark_count: int, land_count: int, sea_count: int,  filename: str = "default.cnf"):
         """
         Default constructor
         :param filename: name of the cnf file
@@ -31,29 +32,27 @@ class Game:
         self.cmd = None
         self.width = width
         self.height = height
+        self.sea_count = sea_count
+        self.land_count = land_count
+        self.crocodile_count = crocodile_count
+        self.tiger_count = tiger_count
+        self.shark_count = shark_count
         self.visitedCells = []
+        self.clauses = []
         if platform == 'darwin':
             self.cmd = "./gophersat-1.1.6-MacOS"
         elif platform == 'win32':
             self.cmd = "./gophersat-1.1.6-Windows"
         elif platform == 'linux':
             self.cmd = "./gophersat-1.1.6-Linux"
-        self.create_game_constraints()
 
-    def make_decision(self, data_received) -> Tuple[int, int, str]:
-        """
-        Call on each click, make a new decision and choose a position to do an action
-        :param data_received: string received by the api
-        :return: tuple representing the client action : position click, action
-        """
-
-        solve = self.exec_gophersat()
-
-        # TODO check if can stop
-
-        # TODO update clauses
-
-        return False
+    def make_decision(self):
+        self.write_dimacs_file(self.clauses_to_dimacs(self.clauses, self.height * self.width * length))
+        response = self.exec_gophersat()
+        if response[0]:
+            for var in response[1]:
+                if var > 0:
+                    cell = self.variable_to_cell(var)
 
     def exec_gophersat(self, encoding: str = "utf8") -> Tuple[bool, List[int]]:
         """
@@ -121,7 +120,7 @@ class Game:
         """
         i, rest = var // (self.width * length), var % (self.width * length)
         j, rest = rest // length, rest % length
-        val = values_list[rest - 1]
+        val = values_list[rest]
         return i, j, val
 
     def at_least_one(self, vars: List[int]) -> List[int]:
@@ -146,7 +145,7 @@ class Game:
         cells = []
         for a in range(i - 1, i + 2):
             for b in range(j - 1, j + 2):
-                if 0 <= a <= self.height and 0 <= b <= self.width and (a != i or b != j):
+                if 0 <= a < self.height and 0 <= b < self.width and (a != i or b != j):
                     cells.append([a, b])
         return cells
 
@@ -154,22 +153,26 @@ class Game:
         clauses = []
         cells = []
         for key in values_dict:
-            if key != "W" and key != "U":
+            if key != "W" and key != "L":
                 cells.append(self.cell_to_variable(i, j, key))
             elif key == "T":
                 clauses.append([-self.cell_to_variable(i, j, key), -self.cell_to_variable(i, j, "W")])
             elif key == "S":
-                clauses.append([-self.cell_to_variable(i, j, key), self.cell_to_variable(i, j, "W")])
+                clauses.append([-self.cell_to_variable(i, j, key), -self.cell_to_variable(i, j, "L")])
         clauses += self.exact(cells, 1)
+        clauses.append([self.cell_to_variable(i, j, "W"), self.cell_to_variable(i, j, "L")])
+        clauses.append([-self.cell_to_variable(i, j, "W"), -self.cell_to_variable(i, j, "L")])
         return clauses
 
-    def add_information_constraints(self, data: Dict) -> List[List[int]]:
+    def add_information_constraints(self, data: Dict):
         clauses = []
         pos = data["pos"]
         field = data["field"]
         f = self.cell_to_variable(pos[0], pos[1], "W") if field == "sea" else -self.cell_to_variable(pos[0], pos[1], "W")
         proximity_count = data.get("prox_count", None)
         if proximity_count:
+            self.board[pos[0]][pos[1]] = ["W" if field == "sea" else "L", 'F', proximity_count]
+            clauses.append([self.cell_to_variable(pos[0], pos[1], 'F')])
             near_cells = self.getNearCells(pos[0], pos[1])
             for cell in near_cells:
                 if cell not in self.visitedCells:
@@ -182,21 +185,14 @@ class Game:
                 cells = []
                 animal = animals[index]
                 for cell in near_cells:
+                    print(data, cell, near_cells, animal, self.cell_to_variable(cell[0], cell[1], animal))
                     cells.append(self.cell_to_variable(cell[0], cell[1], animal))
                 clauses += self.exact(cells, count)
             cells = []
             for cell in near_cells:
                 cells.append(self.cell_to_variable(cell[0], cell[1], "F"))
             clauses += self.exact(cells, len(near_cells) - total_count)
+        else:
+            self.board[pos[0]][pos[1]] = ["W" if field == "sea" else "L", '?', []]
         clauses.append([f])
-        return clauses
-
-    def create_game_constraints(self):
-        """
-        Init the clauses
-        """
-        clauses = []
-
-        # TODO create clauses
-
-        self.write_dimacs_file(self.clauses_to_dimacs(clauses, length * self.width * self.height))
+        self.clauses += clauses
