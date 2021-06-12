@@ -4,11 +4,11 @@ from random import randrange, random
 
 WIDTH_MAP = 10
 HEIGHT_MAP = 10
-CHANCE_ANIMAL = 0.2
-ANIMALS = ['S', 'C']
-VOID = ['~']
+CHANCE_ANIMAL = 0.1
+ANIMALS = ['S', 'W', 'C', 'T']
+VOID = ['~', '-']
 
-def randomTerrain(y, x, tab):
+def randomTerrain(x, y, tab):
     try:
         tab[y][x] = (VOID[randrange(len(VOID))])
     except Exception:
@@ -35,7 +35,7 @@ def main():
         # Starting point
         start_x = randrange(WIDTH_MAP)
         start_y = randrange(HEIGHT_MAP)
-        f.write(str(start_x) + ' ' + str(start_y))
+        f.write(str(start_y) + ' ' + str(start_x))
 
         # Creation of a matrice that represents the map
         map = []
@@ -63,6 +63,7 @@ def main():
             f.write("\n")
             for value in range(len(line)):
                 (value < len(line) - 1) if (f.write(line[value] + ' ')) else (f.write(line[value]))
+        f.write('\n')
         f.close()
     print("Generation Fini!")
 
