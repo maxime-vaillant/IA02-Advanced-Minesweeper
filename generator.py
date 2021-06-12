@@ -4,13 +4,13 @@ from random import randrange, random
 
 WIDTH_MAP = 10
 HEIGHT_MAP = 10
-CHANCE_ANIMAL = 0.1
-ANIMALS = ['S', 'W', 'T', 'C']
-VOID = ['-', '~']
+CHANCE_ANIMAL = 0.2
+ANIMALS = ['S', 'C']
+VOID = ['~']
 
-def randomTerrain(y,x,tab):
+def randomTerrain(y, x, tab):
     try:
-        tab[y][x] = (VOID[randrange(2)])
+        tab[y][x] = (VOID[randrange(len(VOID))])
     except Exception:
         print('Start is on the edge of the board')
 
@@ -43,9 +43,9 @@ def main():
             line = []
             for x in range(WIDTH_MAP):
                 if random() < CHANCE_ANIMAL:
-                    line.append(ANIMALS[randrange(3)])
+                    line.append(ANIMALS[randrange(len(ANIMALS))])
                 else:
-                    line.append(VOID[randrange(2)])
+                    line.append(VOID[randrange(len(VOID))])
             map.append(line)
 
         # Changing animals on starting point
