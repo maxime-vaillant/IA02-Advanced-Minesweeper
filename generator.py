@@ -2,13 +2,19 @@ import os
 import glob
 from random import randrange, random
 
+WIDTH_MAP = 10
+HEIGHT_MAP = 10
+CHANCE_ANIMAL = 0.1
+ANIMALS = ['S', 'W', 'T', 'C']
+VOID = ['-', '~']
+
+def randomTerrain(y,x,tab):
+    try:
+        tab[y][x] = (VOID[randrange(2)])
+    except Exception:
+        print('Start is on the edge of the board')
 
 def main():
-    WIDTH_MAP = 10
-    HEIGHT_MAP = 10
-    CHANCE_ANIMAL = 0.1
-    ANIMALS = ['S', 'W', 'T', 'C']
-    VOID = ['-', '~']
     # Get a list of all the file paths that ends with .txt from in specified directory
     fileList = glob.glob('./crocomine/grids/mapGenerated*.croco')
     # Iterate over the list of filepaths & remove each file.
@@ -18,36 +24,47 @@ def main():
         except:
             print("Error while deleting file : ", filePath)
 
-    # generate maps
+    # Generate each map
     nbMap = input("Enter number of map: ")
     for i in range(int(nbMap)):
         # Map information
-        f = open("./crocomine/grids/mapGenerated"+str(i)+".croco", "a")
-        f.write("Map generated number " + str(i)+'\n')
-        f.write(str(HEIGHT_MAP) + ' ' + str(WIDTH_MAP)+'\n')
+        f = open("./crocomine/grids/mapGenerated" + str(i) + ".croco", "a")
+        f.write("Map generated number " + str(i) + '\n')
+        f.write(str(HEIGHT_MAP) + ' ' + str(WIDTH_MAP) + '\n')
 
         # Starting point
-        startX = randrange(WIDTH_MAP)
-        startY = randrange(HEIGHT_MAP)
-        f.write(str(startX) + ' ' + str(startY))
-        map = [[]] 
+        start_x = randrange(WIDTH_MAP)
+        start_y = randrange(HEIGHT_MAP)
+        f.write(str(start_x) + ' ' + str(start_y))
 
+        # Creation of a matrice that represents the map
+        map = []
         for y in range(HEIGHT_MAP):
-            f.write("\n")
+            line = []
             for x in range(WIDTH_MAP):
                 if random() < CHANCE_ANIMAL:
-                    f.write(ANIMALS[randrange(3)])
+                    line.append(ANIMALS[randrange(3)])
                 else:
-                    f.write(VOID[randrange(2)])
-                if x < WIDTH_MAP-1:
-                    f.write(' ')
+                    line.append(VOID[randrange(2)])
+            map.append(line)
 
-        # delete terrain on start
-        if
+        # Changing animals on starting point
+        randomTerrain(start_x, start_y, map)
+        randomTerrain(start_x+1, start_y, map)
+        randomTerrain(start_x+1, start_y+1, map)
+        randomTerrain(start_x+1, start_y-1, map)
+        randomTerrain(start_x, start_y+1, map)
+        randomTerrain(start_x-1, start_y+1, map)
+        randomTerrain(start_x-1, start_y-1, map)
+        randomTerrain(start_x-1, start_y, map)
+        randomTerrain(start_x, start_y-1, map)
 
+        for line in map:
+            f.write("\n")
+            for value in range(len(line)):
+                (value < len(line) - 1) if (f.write(line[value] + ' ')) else (f.write(line[value]))
         f.close()
     print("Generation Fini!")
-
 
 
 if __name__ == "__main__":
