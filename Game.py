@@ -3,7 +3,7 @@ from sys import platform
 from typing import List, Tuple, Dict
 import itertools
 
-# U: Unknown, F: Free, T: Tiger, C: Crocodile, S: Shark, W: Water
+# L: Land, W: Sea, F: Free, T: Tiger, C: Crocodile, S: Shark
 values_list = ["L", "W", "F", "T", "C", "S"]
 values_dict = {
     "L": 1,
@@ -157,7 +157,7 @@ class Game:
             clauses.append(clause)
         return clauses
 
-    def getNearCells(self, i: int, j: int) -> List[List[int]]:
+    def get_near_cells(self, i: int, j: int) -> List[List[int]]:
         cells = []
         for a in range(i - 1, i + 2):
             for b in range(j - 1, j + 2):
@@ -194,7 +194,7 @@ class Game:
         if proximity_count:
             self.board[pos[0]][pos[1]] = ["W" if field == "sea" else "L", 'F', proximity_count]
             clauses.append([self.cell_to_variable(pos[0], pos[1], 'F')])
-            near_cells = self.getNearCells(pos[0], pos[1])
+            near_cells = self.get_near_cells(pos[0], pos[1])
             for cell in near_cells:
                 if cell not in self.visitedCells:
                     self.visitedCells.append(cell)
