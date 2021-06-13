@@ -35,6 +35,8 @@ def main():
     end = True
 
     status, msg, grid_infos = mine.new_grid()
+    count = 1
+    print(count)
 
     if status != 'Err':
         game = Game(
@@ -53,14 +55,16 @@ def main():
         status, msg, infos = mine.discover(grid_infos['start'][0], grid_infos['start'][1])
 
     while end:
-        print(status, msg, infos)
+        # print(status, msg, infos)
         if status == 'Err':
             end = False
         elif status == 'GG':
             gg_count += 1
             status, msg, grid_infos = mine.new_grid()
-            print()
-            print(status, msg, infos)
+            count += 1
+            print(count)
+            # print()
+            # print(status, msg, infos)
             if status != 'Err':
                 game = Game(
                     grid_infos['m'],
@@ -77,8 +81,10 @@ def main():
         elif status == 'KO':
             ko_count += 1
             status, msg, grid_infos = mine.new_grid()
-            print()
-            print(status, msg, infos)
+            count += 1
+            print(count)
+            # print()
+            # print(status, msg, infos)
             if status != 'Err':
                 game = Game(
                     grid_infos['m'],
@@ -96,7 +102,7 @@ def main():
             for cell in infos:
                 game.add_information_constraints(cell)
             action, cell = game.make_decision()
-            print(action, cell)
+            # print(action, cell)
             if action == 'guess':
                 status, msg, infos = mine.guess(cell[0], cell[1], cell[2])
             elif action == 'discover':
@@ -104,8 +110,10 @@ def main():
             else:
                 ko_count += 1
                 status, msg, grid_infos = mine.new_grid()
-                print()
-                print(status, msg, infos)
+                count += 1
+                print(count)
+                # print()
+                # print(status, msg, infos)
                 if status != 'Err':
                     game = Game(
                         grid_infos['m'],
