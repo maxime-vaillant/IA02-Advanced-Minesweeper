@@ -1,4 +1,5 @@
 import subprocess
+from random import randrange
 from sys import platform
 from typing import List, Tuple, Dict
 import itertools
@@ -39,6 +40,7 @@ class Game:
         self.shark_count = shark_count
         self.visitedCells = []
         self.clauses = []
+        self.cells_infos = {}
         if platform == 'darwin':
             self.cmd = "./gophersat-1.1.6-MacOS"
         elif platform == 'win32':
@@ -47,25 +49,34 @@ class Game:
             self.cmd = "./gophersat-1.1.6-Linux"
 
     def make_decision(self) -> Tuple[str, Tuple]:
+        """ Debug
+        for clause in self.clauses:
+            for c in clause:
+                if c > 0:
+                    print(self.variable_to_cell(c), end='')
+                else:
+                    print(" -", self.variable_to_cell(-c), end='')
+            print()
+        """
         self.write_dimacs_file(self.clauses_to_dimacs(self.clauses, self.height * self.width * length))
         response = self.exec_gophersat()
-        free = []
-        guess = []
+        best_move = ('none', ())
+        best_info = 0
         if response[0]:
             for var in response[1]:
                 if var > 0:
                     cell = self.variable_to_cell(var)
+                    cell_infos = self.cells_infos.get(str([cell[0], cell[1]]), 0)
                     if self.board[cell[0]][cell[1]][1] == '?' and cell[2] != 'W' and cell[2] != 'L':
                         if cell[2] == 'F':
-                            free.append(cell)
+                            if cell_infos > best_info:
+                                best_move = ('discover', cell)
+                                best_info = cell_infos
                         else:
-                            guess.append(cell)
-        if len(free) > 0:
-            return 'discover', free[0]
-        elif len(guess) > 0:
-            return 'guess', guess[0]
-        else:
-            return 'none', ()
+                            if cell_infos > best_info:
+                                best_move = ('guess', cell)
+                                best_info = cell_infos
+        return best_move
 
     def exec_gophersat(self, encoding: str = "utf8") -> Tuple[bool, List[int]]:
         """
@@ -171,7 +182,7 @@ class Game:
         for key in values_dict:
             if key != "W" and key != "L":
                 cells.append(self.cell_to_variable(i, j, key))
-            elif key == "T":
+            if key == "T":
                 clauses.append([-self.cell_to_variable(i, j, key), -self.cell_to_variable(i, j, "W")])
             elif key == "S":
                 clauses.append([-self.cell_to_variable(i, j, key), -self.cell_to_variable(i, j, "L")])
@@ -181,24 +192,28 @@ class Game:
         return clauses
 
     def add_information_constraints(self, data: Dict):
-        clauses = []
         pos = data["pos"]
         field = data["field"]
-        f = self.cell_to_variable(pos[0], pos[1], "W") if field == "sea" else -self.cell_to_variable(pos[0], pos[1],
-                                                                                                     "L")
+        cond = "W" if field == "sea" else "L"
+        clauses = [[self.cell_to_variable(pos[0], pos[1], "W") if field == "sea" else self.cell_to_variable(pos[0], pos[1], "L")]]
         proximity_count = data.get("prox_count", None)
         guess_animal = data.get("animal", None)
         if guess_animal:
             self.board[pos[0]][pos[1]][1] = guess_animal
             clauses.append([self.cell_to_variable(pos[0], pos[1], guess_animal)])
         if proximity_count:
-            self.board[pos[0]][pos[1]] = ["W" if field == "sea" else "L", 'F', proximity_count]
+            self.board[pos[0]][pos[1]] = [cond, 'F', proximity_count]
             clauses.append([self.cell_to_variable(pos[0], pos[1], 'F')])
             near_cells = self.get_near_cells(pos[0], pos[1])
             for cell in near_cells:
                 if cell not in self.visitedCells:
                     self.visitedCells.append(cell)
                     clauses += self.create_rule_on_cell(cell[0], cell[1])
+                cell_infos = self.cells_infos.get(str([cell[0], cell[1]]), None)
+                if cell_infos:
+                    self.cells_infos[str([cell[0], cell[1]])] += 1
+                else:
+                    self.cells_infos[str([cell[0], cell[1]])] = 1
             animals = ("T", "S", "C")
             total_count = 0
             for index, count in enumerate(proximity_count):
@@ -213,6 +228,5 @@ class Game:
                 cells.append(self.cell_to_variable(cell[0], cell[1], "F"))
             clauses += self.exact(cells, len(near_cells) - total_count)
         else:
-            self.board[pos[0]][pos[1]][0] = "W" if field == "sea" else "L"
-        clauses.append([f])
+            self.board[pos[0]][pos[1]][0] = cond
         self.clauses += clauses

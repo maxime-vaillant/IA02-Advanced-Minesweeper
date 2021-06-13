@@ -29,6 +29,9 @@ def main():
     members = "Victor et Maxime"
     mine = CrocomineClient(server, group, members)
 
+    ko_count = 0
+    gg_count = 0
+
     end = True
 
     status, msg, grid_infos = mine.new_grid()
@@ -53,8 +56,29 @@ def main():
         print(status, msg, infos)
         if status == 'Err':
             end = False
-        elif status == 'GG' or status == 'KO':
+        elif status == 'GG':
+            gg_count += 1
             status, msg, grid_infos = mine.new_grid()
+            print()
+            print(status, msg, infos)
+            if status != 'Err':
+                game = Game(
+                    grid_infos['m'],
+                    grid_infos['n'],
+                    grid_infos['tiger_count'],
+                    grid_infos['shark_count'],
+                    grid_infos['croco_count'],
+                    grid_infos['land_count'],
+                    grid_infos['sea_count']
+                )
+                status, msg, infos = mine.discover(grid_infos['start'][0], grid_infos['start'][1])
+            else:
+                end = False
+        elif status == 'KO':
+            ko_count += 1
+            status, msg, grid_infos = mine.new_grid()
+            print()
+            print(status, msg, infos)
             if status != 'Err':
                 game = Game(
                     grid_infos['m'],
@@ -78,8 +102,26 @@ def main():
             elif action == 'discover':
                 status, msg, infos = mine.discover(cell[0], cell[1])
             else:
-                end = False
+                ko_count += 1
+                status, msg, grid_infos = mine.new_grid()
+                print()
+                print(status, msg, infos)
+                if status != 'Err':
+                    game = Game(
+                        grid_infos['m'],
+                        grid_infos['n'],
+                        grid_infos['tiger_count'],
+                        grid_infos['shark_count'],
+                        grid_infos['croco_count'],
+                        grid_infos['land_count'],
+                        grid_infos['sea_count']
+                    )
+                    status, msg, infos = mine.discover(grid_infos['start'][0], grid_infos['start'][1])
+                else:
+                    end = False
 
+    print('WIN:', gg_count)
+    print('KO:', ko_count)
     print('Fin')
 
 
