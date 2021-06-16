@@ -5,12 +5,12 @@ from random import randrange, random
 WIDTH_MAP = 10
 HEIGHT_MAP = 10
 CHANCE_ANIMAL = 0.1
-ANIMALS = ['S', 'W', 'T', 'C']
-VOID = ['-', '~']
+ANIMALS = ['S', 'W', 'C', 'T']
+VOID = ['~', '-']
 
-def randomTerrain(y,x,tab):
+def randomTerrain(x, y, tab):
     try:
-        tab[y][x] = (VOID[randrange(2)])
+        tab[y][x] = (VOID[randrange(len(VOID))])
     except Exception:
         print('Start is on the edge of the board')
 
@@ -35,7 +35,7 @@ def main():
         # Starting point
         start_x = randrange(WIDTH_MAP)
         start_y = randrange(HEIGHT_MAP)
-        f.write(str(start_x) + ' ' + str(start_y))
+        f.write(str(start_y) + ' ' + str(start_x))
 
         # Creation of a matrice that represents the map
         map = []
@@ -43,9 +43,9 @@ def main():
             line = []
             for x in range(WIDTH_MAP):
                 if random() < CHANCE_ANIMAL:
-                    line.append(ANIMALS[randrange(3)])
+                    line.append(ANIMALS[randrange(len(ANIMALS))])
                 else:
-                    line.append(VOID[randrange(2)])
+                    line.append(VOID[randrange(len(VOID))])
             map.append(line)
 
         for xStart in [-1, 0, 1]:
@@ -56,6 +56,7 @@ def main():
             f.write("\n")
             for value in range(len(line)):
                 (value < len(line) - 1) if (f.write(line[value] + ' ')) else (f.write(line[value]))
+        f.write('\n')
         f.close()
     print("Generation Fini!")
 
