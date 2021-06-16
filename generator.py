@@ -48,16 +48,9 @@ def main():
                     line.append(VOID[randrange(2)])
             map.append(line)
 
-        # Changing animals on starting point
-        randomTerrain(start_x, start_y, map)
-        randomTerrain(start_x+1, start_y, map)
-        randomTerrain(start_x+1, start_y+1, map)
-        randomTerrain(start_x+1, start_y-1, map)
-        randomTerrain(start_x, start_y+1, map)
-        randomTerrain(start_x-1, start_y+1, map)
-        randomTerrain(start_x-1, start_y-1, map)
-        randomTerrain(start_x-1, start_y, map)
-        randomTerrain(start_x, start_y-1, map)
+        for xStart in [-1, 0, 1]:
+            for yStart in [-1, 0, 1]:
+                randomTerrain(start_x+xStart, start_y+yStart, map)
 
         for line in map:
             f.write("\n")
