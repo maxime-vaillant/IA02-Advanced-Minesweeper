@@ -30,6 +30,7 @@ def main():
     end = True
 
     status, msg, grid_infos = mine.new_grid()
+    start_time_grid = time.time()
     count = 1
     print(count)
 
@@ -55,7 +56,10 @@ def main():
             end = False
         elif status == 'GG':
             gg_count += 1
+            print()
+            print("GRID --- %s seconds ---" % (time.time() - start_time_grid))
             status, msg, grid_infos = mine.new_grid()
+            start_time_grid = time.time()
             count += 1
             print(count, 'GG')
             print()
@@ -76,7 +80,10 @@ def main():
                 end = False
         elif status == 'KO':
             ko_count += 1
+            print()
+            print("GRID --- %s seconds ---" % (time.time() - start_time_grid))
             status, msg, grid_infos = mine.new_grid()
+            start_time_grid = time.time()
             count += 1
             print(count, 'KO')
             print()
@@ -108,8 +115,10 @@ def main():
                 status, msg, infos = mine.discover(cell[0], cell[1])
             else:
                 ko_count += 1
-
+                print()
+                print("GRID --- %s seconds ---" % (time.time() - start_time_grid))
                 status, msg, grid_infos = mine.new_grid()
+                start_time_grid = time.time()
                 count += 1
                 print(count, 'NONE')
                 print()

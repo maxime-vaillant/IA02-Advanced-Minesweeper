@@ -60,27 +60,34 @@ class Game:
         response = self.exec_gophersat()
         best_move = ('none', ())
         best_score = 0
+        vars = []
         if response[0]:
             for var in response[1]:
                 if var > 0:
                     cell = self.variable_to_cell(var)
-                    cell_infos = self.cells_infos.get(str([cell[0], cell[1]]), [0, 1])
-                    score_cell = cell_infos[0] / cell_infos[1]
                     if self.board[cell[0]][cell[1]][0] == '?':
-                        self.write_dimacs_file(self.clauses_to_dimacs(self.clauses+[[-var]], self.height * self.width * length))
-                        deduction = self.exec_gophersat()
-                        if not deduction[0]:
-                            if cell[2] == 'F':
-                                return 'discover', cell
-                            else:
-                                return 'guess', cell
-                        else:
-                            if score_cell >= best_score:
-                                best_score = score_cell
-                                if cell[2] == 'F':
-                                    best_move = ('discover', cell)
-                                else:
-                                    best_move = ('guess', cell)
+                        cell_infos = self.cells_infos.get(str([cell[0], cell[1]]), [0, 1])
+                        score_cell = cell_infos[0] / cell_infos[1]
+                        vars.append([var, cell, score_cell])
+        vars.sort(key=lambda x: x[2], reverse=True)
+        for v in vars:
+            var = v[0]
+            cell = v[1]
+            score_cell = v[2]
+            self.write_dimacs_file(self.clauses_to_dimacs(self.clauses+[[-var]], self.height * self.width * length))
+            deduction = self.exec_gophersat()
+            if not deduction[0]:
+                if cell[2] == 'F':
+                    return 'discover', cell
+                else:
+                    return 'guess', cell
+            else:
+                if score_cell >= best_score:
+                    best_score = score_cell
+                    if cell[2] == 'F':
+                        best_move = ('discover', cell)
+                    else:
+                        best_move = ('guess', cell)
         return best_move
 
     def exec_gophersat(self, encoding: str = "utf8") -> Tuple[bool, List[int]]:
