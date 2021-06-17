@@ -56,6 +56,7 @@ class Game:
                     print(" -", self.variable_to_cell(-c), end='')
             print()
         """
+        # Cord search
         for i in range(self.height):
             for j in range(self.width):
                 # If cell can possibly handle a cord
@@ -108,6 +109,12 @@ class Game:
                         best_move = ('discover', cell)
                     else:
                         best_move = ('guess', cell)
+        # If in this case there is no response
+        if len(vars) == 0:
+            for i in range(self.height):
+                for j in range(self.width):
+                    if self.board[i][j][1] == '?':
+                        return 'discover', self.cell_to_variable(i,j,-1)
         return best_move
 
     def exec_gophersat(self, encoding: str = "utf8") -> Tuple[bool, List[int]]:
