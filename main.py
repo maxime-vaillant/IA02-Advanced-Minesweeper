@@ -41,8 +41,8 @@ def main():
             grid_infos['m'],
             grid_infos['n'],
             grid_infos['tiger_count'],
-            grid_infos['shark_count'],
             grid_infos['croco_count'],
+            grid_infos['shark_count'],
             grid_infos['land_count'],
             grid_infos['sea_count']
         )

@@ -36,6 +36,9 @@ class Game:
         self.crocodile_count = crocodile_count
         self.tiger_count = tiger_count
         self.shark_count = shark_count
+        self.crocodile_guess = 0
+        self.shark_guess = 0
+        self.tiger_guess = 0
         self.visitedCells = []
         self.clauses = []
         self.cells_infos = {}
@@ -45,6 +48,14 @@ class Game:
             self.cmd = "./gophersat-1.1.6-Windows"
         elif platform == 'linux':
             self.cmd = "./gophersat-1.1.6-Linux"
+
+    def inc_animal_count(self, guess_type: str) -> None:
+        if guess_type == "S":
+            self.shark_guess += 1
+        elif guess_type == "T":
+            self.tiger_guess += 1
+        else:
+            self.crocodile_guess += 1
 
     def make_decision(self) -> Tuple[str, Tuple]:
         """ Debug
@@ -92,6 +103,11 @@ class Game:
                         score_cell = cell_infos[0] / cell_infos[1]
                         vars.append([var, cell, score_cell])
         vars.sort(key=lambda x: x[2], reverse=True)
+        print(vars)
+        print(self.crocodile_count)
+        print(self.shark_count)
+        print(self.tiger_count)
+        print(self.crocodile_guess)
         for v in vars:
             var = v[0]
             cell = v[1]
@@ -232,6 +248,14 @@ class Game:
         clauses += self.exact(cells, 1)
         return clauses
 
+    def create_rule_last_animal(self, animal: str)-> List[List[int]]:
+        cells = []
+        for i in range(self.width):
+            for j in range(self.height):
+                if self.board[i][j][0] == '?':
+                    cells.append(self.cell_to_variable(i,j,animal))
+        return self.exact(cells,1)
+
     def add_information_constraints(self, data: Dict):
         pos = data["pos"]
         field = data["field"]
@@ -239,8 +263,11 @@ class Game:
         proximity_count = data.get("prox_count", None)
         guess_animal = data.get("animal", None)
         if guess_animal:
+            self.inc_animal_count(guess_animal)
             self.board[pos[0]][pos[1]][0] = guess_animal
             clauses.append([self.cell_to_variable(pos[0], pos[1], guess_animal)])
+            if self.crocodile_guess == self.crocodile_count-1:
+                clauses += self.create_rule_last_animal(guess_animal)
         if proximity_count:
             self.board[pos[0]][pos[1]] = ['F', proximity_count]
             clauses.append([self.cell_to_variable(pos[0], pos[1], 'F')])
