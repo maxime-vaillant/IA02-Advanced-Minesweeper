@@ -1,8 +1,7 @@
+import itertools
 import subprocess
-from random import randrange
 from sys import platform
 from typing import List, Tuple, Dict
-import itertools
 
 # F: Free, T: Tiger, C: Crocodile, S: Shark
 values_list = ["F", "T", "C", "S"]
@@ -20,12 +19,13 @@ class Game:
     This class represents a game board
     """
 
-    def __init__(self, height: int, width: int, tiger_count: int, crocodile_count: int, shark_count: int,
+    def __init__(self, height: int, width: int, tiger_count: int, shark_count: int, crocodile_count: int,
                  land_count: int, sea_count: int, filename: str = "default.cnf"):
         """
         Default constructor
         :param filename: name of the cnf file
         """
+        # A cell is represented by a list ['?', []], the '?' represent the type of the cell ('F', 'T', 'S', 'C', 'F') and the [] is the proximity count.
         self.board = [[['?', []] for _ in range(width)] for _ in range(height)]
         self.file = filename
         self.cmd = None
@@ -33,12 +33,20 @@ class Game:
         self.height = height
         self.sea_count = sea_count
         self.land_count = land_count
-        self.crocodile_count = crocodile_count
-        self.tiger_count = tiger_count
-        self.shark_count = shark_count
-        self.crocodile_guess = 0
-        self.shark_guess = 0
-        self.tiger_guess = 0
+        self.infos = {
+            "T": {
+                "guess": 0,
+                "count": tiger_count
+            },
+            "S": {
+                "guess": 0,
+                "count": shark_count
+            },
+            "C": {
+                "guess": 0,
+                "count": crocodile_count
+            }
+        }
         self.visitedCells = []
         self.clauses = []
         self.cells_infos = {}
@@ -48,14 +56,6 @@ class Game:
             self.cmd = "./gophersat-1.1.6-Windows"
         elif platform == 'linux':
             self.cmd = "./gophersat-1.1.6-Linux"
-
-    def inc_animal_count(self, guess_type: str) -> None:
-        if guess_type == "S":
-            self.shark_guess += 1
-        elif guess_type == "T":
-            self.tiger_guess += 1
-        else:
-            self.crocodile_guess += 1
 
     def make_decision(self) -> Tuple[str, Tuple]:
         """ Debug
@@ -68,10 +68,10 @@ class Game:
             print()
         """
         # Cord search
-        for cell in self.visitedCells:
+        for c in self.visitedCells:
             # If cell can possibly handle a cord
-            i = cell[0]
-            j = cell[1]
+            i = c[0]
+            j = c[1]
             if self.board[i][j][1]:
                 near_cells = self.get_near_cells(i, j)
                 tiger_found = 0
@@ -100,14 +100,9 @@ class Game:
                     cell = self.variable_to_cell(var)
                     if self.board[cell[0]][cell[1]][0] == '?':
                         cell_infos = self.cells_infos.get(str([cell[0], cell[1]]), [0, 1])
-                        score_cell = cell_infos[0] / cell_infos[1]
+                        score_cell = cell_infos[0] / 8
                         vars.append([var, cell, score_cell])
         vars.sort(key=lambda x: x[2], reverse=True)
-        print(vars)
-        print(self.crocodile_count)
-        print(self.shark_count)
-        print(self.tiger_count)
-        print(self.crocodile_guess)
         for v in vars:
             var = v[0]
             cell = v[1]
@@ -213,7 +208,7 @@ class Game:
         Take a list of clauses and remove all duplicates ones
         :param param: number exact
         :param vars: in clauses list
-        :return: list of unique clauses
+        :return: list of exact number clauses
         """
         clauses = [self.at_least_one(vars)] if param != 0 or param == len(vars) else []
         clauses += [[x] for x in vars] if param == len(vars) else []
@@ -241,20 +236,18 @@ class Game:
         return cells
 
     def create_rule_on_cell(self, i: int, j: int) -> List[List[int]]:
-        clauses = []
         cells = []
         for key in values_dict:
             cells.append(self.cell_to_variable(i, j, key))
-        clauses += self.exact(cells, 1)
-        return clauses
+        return self.exact(cells, 1)
 
-    def create_rule_last_animal(self, animal: str)-> List[List[int]]:
+    def create_rule_last_animal(self, animal: str, param: int) -> List[List[int]]:
         cells = []
-        for i in range(self.width):
-            for j in range(self.height):
+        for i in range(self.height):
+            for j in range(self.width):
                 if self.board[i][j][0] == '?':
-                    cells.append(self.cell_to_variable(i,j,animal))
-        return self.exact(cells,1)
+                    cells.append(self.cell_to_variable(i, j, animal))
+        return self.exact(cells, param)
 
     def add_information_constraints(self, data: Dict):
         pos = data["pos"]
@@ -263,11 +256,12 @@ class Game:
         proximity_count = data.get("prox_count", None)
         guess_animal = data.get("animal", None)
         if guess_animal:
-            self.inc_animal_count(guess_animal)
+            # Increment guess count
+            self.infos[guess_animal]["guess"] += 1
             self.board[pos[0]][pos[1]][0] = guess_animal
             clauses.append([self.cell_to_variable(pos[0], pos[1], guess_animal)])
-            if self.crocodile_guess == self.crocodile_count-1:
-                clauses += self.create_rule_last_animal(guess_animal)
+            if self.infos[guess_animal]["count"] - self.infos[guess_animal]["guess"] == 1:
+                clauses += self.create_rule_last_animal(guess_animal, 1)
         if proximity_count:
             self.board[pos[0]][pos[1]] = ['F', proximity_count]
             clauses.append([self.cell_to_variable(pos[0], pos[1], 'F')])
