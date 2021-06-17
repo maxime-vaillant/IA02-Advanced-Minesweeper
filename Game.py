@@ -57,26 +57,27 @@ class Game:
             print()
         """
         # Cord search
-        for i in range(self.height):
-            for j in range(self.width):
-                # If cell can possibly handle a cord
-                if self.board[i][j][1]:
-                    near_cells = self.get_near_cells(i, j)
-                    tiger_found = 0
-                    shark_found = 0
-                    crocodile_found = 0
-                    known = 0
-                    for cell in near_cells:
-                        if self.board[cell[0]][cell[1]][0] == 'F':
-                            known += 1
-                        elif self.board[cell[0]][cell[1]][0] == 'T':
-                            tiger_found += 1
-                        elif self.board[cell[0]][cell[1]][0] == 'S':
-                            shark_found += 1
-                        elif self.board[cell[0]][cell[1]][0] == 'C':
-                            crocodile_found += 1
-                    if tiger_found == self.board[i][j][1][0] and shark_found == self.board[i][j][1][1] and crocodile_found == self.board[i][j][1][2] and known + tiger_found + shark_found + crocodile_found != len(near_cells):
-                        return 'chord', (i, j)
+        for cell in self.visitedCells:
+            # If cell can possibly handle a cord
+            i = cell[0]
+            j = cell[1]
+            if self.board[i][j][1]:
+                near_cells = self.get_near_cells(i, j)
+                tiger_found = 0
+                shark_found = 0
+                crocodile_found = 0
+                known = 0
+                for cell in near_cells:
+                    if self.board[cell[0]][cell[1]][0] == 'F':
+                        known += 1
+                    elif self.board[cell[0]][cell[1]][0] == 'T':
+                        tiger_found += 1
+                    elif self.board[cell[0]][cell[1]][0] == 'S':
+                        shark_found += 1
+                    elif self.board[cell[0]][cell[1]][0] == 'C':
+                        crocodile_found += 1
+                if tiger_found == self.board[i][j][1][0] and shark_found == self.board[i][j][1][1] and crocodile_found == self.board[i][j][1][2] and known + tiger_found + shark_found + crocodile_found != len(near_cells):
+                    return 'chord', (i, j)
         self.write_dimacs_file(self.clauses_to_dimacs(self.clauses, self.height * self.width * length))
         response = self.exec_gophersat()
         best_move = ('none', ())
@@ -109,12 +110,12 @@ class Game:
                         best_move = ('discover', cell)
                     else:
                         best_move = ('guess', cell)
-        # If in this case there is no response
+        # If in this case there is no response (fix of none error)
         if len(vars) == 0:
             for i in range(self.height):
                 for j in range(self.width):
-                    if self.board[i][j][1] == '?':
-                        return 'discover', self.cell_to_variable(i,j,-1)
+                    if self.board[i][j][0] == '?':
+                        return 'discover', (i, j, 'F')
         return best_move
 
     def exec_gophersat(self, encoding: str = "utf8") -> Tuple[bool, List[int]]:
