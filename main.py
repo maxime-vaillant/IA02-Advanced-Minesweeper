@@ -24,6 +24,9 @@ def main():
     members = "Victor et Maxime"
     mine = CrocomineClient(server, group, members)
 
+    total_time = 0
+    total_move = 0
+
     ko_count = 0
     gg_count = 0
     fail = []
@@ -37,6 +40,7 @@ def main():
     print(count)
 
     if status != 'Err':
+        nb_move = 0
         game = Game(
             grid_infos['m'],
             grid_infos['n'],
@@ -60,7 +64,11 @@ def main():
             gg_count += 1
             print()
             print("GRID --- %s seconds ---" % (time.time() - start_time_grid))
+            total_time += time.time() - start_time_grid
+            print("Nombre de coup", nb_move)
+            total_move += nb_move
             status, msg, grid_infos = mine.new_grid()
+            nb_move = 0
             map = msg
             start_time_grid = time.time()
             count += 1
@@ -86,7 +94,9 @@ def main():
             fail.append(map)
             print()
             print("GRID --- %s seconds ---" % (time.time() - start_time_grid))
+            print("Nombre de coup", nb_move)
             status, msg, grid_infos = mine.new_grid()
+            nb_move = 0
             map = msg
             start_time_grid = time.time()
             count += 1
@@ -108,6 +118,7 @@ def main():
             else:
                 end = False
         elif status == 'OK':
+            nb_move += 1
             start_time = time.time()
             for cell in infos:
                 game.add_information_constraints(cell)
@@ -125,7 +136,9 @@ def main():
                 fail.append(map)
                 print()
                 print("GRID --- %s seconds ---" % (time.time() - start_time_grid))
+                print("Nombre de coup", nb_move)
                 status, msg, grid_infos = mine.new_grid()
+                nb_move = 0
                 map = msg
                 start_time_grid = time.time()
                 count += 1
@@ -150,6 +163,9 @@ def main():
     print('WIN:', gg_count)
     print('KO:', ko_count)
     print('FAILS', fail)
+    print()
+    print("TEMPS TOTAL", total_time)
+    print("NOMBRE COUP TOTAL", total_move)
     print('Fin')
 
 

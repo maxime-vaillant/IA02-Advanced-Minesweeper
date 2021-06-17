@@ -50,6 +50,7 @@ class Game:
         self.visitedCells = []
         self.clauses = []
         self.cells_infos = {}
+        self.guest_moves = []
         if platform == 'darwin':
             self.cmd = "./gophersat-1.1.6-MacOS"
         elif platform == 'win32':
@@ -89,10 +90,11 @@ class Game:
                         crocodile_found += 1
                 if tiger_found == self.board[i][j][1][0] and shark_found == self.board[i][j][1][1] and crocodile_found == self.board[i][j][1][2] and known + tiger_found + shark_found + crocodile_found != len(near_cells):
                     return 'chord', (i, j)
+        if len(self.guest_moves) > 0:
+            return 'guess', self.guest_moves.pop(0)
+        discover_moves = []
         self.write_dimacs_file(self.clauses_to_dimacs(self.clauses, self.height * self.width * length))
         response = self.exec_gophersat()
-        best_move = ('none', ())
-        best_score = 0
         vars = []
         if response[0]:
             for var in response[1]:
@@ -106,28 +108,23 @@ class Game:
         for v in vars:
             var = v[0]
             cell = v[1]
-            score_cell = v[2]
             self.write_dimacs_file(self.clauses_to_dimacs(self.clauses+[[-var]], self.height * self.width * length))
             deduction = self.exec_gophersat()
             if not deduction[0]:
                 if cell[2] == 'F':
-                    return 'discover', cell
+                    discover_moves.append(cell)
                 else:
-                    return 'guess', cell
-            else:
-                if score_cell >= best_score:
-                    best_score = score_cell
-                    if cell[2] == 'F':
-                        best_move = ('discover', cell)
-                    else:
-                        best_move = ('guess', cell)
+                    self.guest_moves.append(cell)
         # If in this case there is no response (fix of none error)
-        if len(vars) == 0:
+        if len(self.guest_moves) > 0:
+            return 'guess', self.guest_moves.pop(0)
+        elif len(discover_moves) > 0:
+            return 'discover', discover_moves[0]
+        else:
             for i in range(self.height):
                 for j in range(self.width):
                     if self.board[i][j][0] == '?':
                         return 'discover', (i, j, 'F')
-        return best_move
 
     def exec_gophersat(self, encoding: str = "utf8") -> Tuple[bool, List[int]]:
         """
