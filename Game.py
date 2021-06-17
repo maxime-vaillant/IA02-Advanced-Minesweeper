@@ -56,6 +56,26 @@ class Game:
                     print(" -", self.variable_to_cell(-c), end='')
             print()
         """
+        for i in range(self.height):
+            for j in range(self.width):
+                # If cell can possibly handle a cord
+                if self.board[i][j][1]:
+                    near_cells = self.get_near_cells(i, j)
+                    tiger_found = 0
+                    shark_found = 0
+                    crocodile_found = 0
+                    known = 0
+                    for cell in near_cells:
+                        if self.board[cell[0]][cell[1]][0] == 'F':
+                            known += 1
+                        elif self.board[cell[0]][cell[1]][0] == 'T':
+                            tiger_found += 1
+                        elif self.board[cell[0]][cell[1]][0] == 'S':
+                            shark_found += 1
+                        elif self.board[cell[0]][cell[1]][0] == 'C':
+                            crocodile_found += 1
+                    if tiger_found == self.board[i][j][1][0] and shark_found == self.board[i][j][1][1] and crocodile_found == self.board[i][j][1][2] and known + tiger_found + shark_found + crocodile_found != len(near_cells):
+                        return 'chord', (i, j)
         self.write_dimacs_file(self.clauses_to_dimacs(self.clauses, self.height * self.width * length))
         response = self.exec_gophersat()
         best_move = ('none', ())

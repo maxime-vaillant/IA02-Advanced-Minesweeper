@@ -26,10 +26,12 @@ def main():
 
     ko_count = 0
     gg_count = 0
+    fail = []
 
     end = True
 
     status, msg, grid_infos = mine.new_grid()
+    map = msg
     start_time_grid = time.time()
     count = 1
     print(count)
@@ -59,6 +61,7 @@ def main():
             print()
             print("GRID --- %s seconds ---" % (time.time() - start_time_grid))
             status, msg, grid_infos = mine.new_grid()
+            map = msg
             start_time_grid = time.time()
             count += 1
             print(count, 'GG')
@@ -80,9 +83,11 @@ def main():
                 end = False
         elif status == 'KO':
             ko_count += 1
+            fail.append(map)
             print()
             print("GRID --- %s seconds ---" % (time.time() - start_time_grid))
             status, msg, grid_infos = mine.new_grid()
+            map = msg
             start_time_grid = time.time()
             count += 1
             print(count, 'KO')
@@ -113,11 +118,15 @@ def main():
                 status, msg, infos = mine.guess(cell[0], cell[1], cell[2])
             elif action == 'discover':
                 status, msg, infos = mine.discover(cell[0], cell[1])
+            elif action == 'chord':
+                status, msg, infos = mine.chord(cell[0], cell[1])
             else:
                 ko_count += 1
+                fail.append(map)
                 print()
                 print("GRID --- %s seconds ---" % (time.time() - start_time_grid))
                 status, msg, grid_infos = mine.new_grid()
+                map = msg
                 start_time_grid = time.time()
                 count += 1
                 print(count, 'NONE')
@@ -140,6 +149,7 @@ def main():
 
     print('WIN:', gg_count)
     print('KO:', ko_count)
+    print('FAILS', fail)
     print('Fin')
 
 
