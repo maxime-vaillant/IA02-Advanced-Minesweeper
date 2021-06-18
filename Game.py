@@ -58,11 +58,11 @@ class Game:
         self.guest_moves = []
         self.cmd = None
         if platform == 'darwin':
-            self.cmd = "./gophersat-1.1.6-MacOS"
+            self.cmd = "./gophersat/gophersat-1.1.6-MacOS"
         elif platform == 'win32':
-            self.cmd = "./gophersat-1.1.6-Windows"
+            self.cmd = "./gophersat/gophersat-1.1.6-Windows"
         elif platform == 'linux':
-            self.cmd = "./gophersat-1.1.6-Linux"
+            self.cmd = "./gophersat/gophersat-1.1.6-Linux"
 
     def exec_gophersat(self, encoding: str = "utf8") -> Tuple[bool, List[int]]:
         """
