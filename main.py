@@ -1,46 +1,13 @@
-from crocomine.client.crocomine_client import CrocomineClient
-from Game import Game
 import time
+from typing import Tuple
 
-values_list = ["L", "W", "F", "T", "C", "S"]
-values_dict = {
-    "L": 1,
-    "W": 2,
-    "F": 3,
-    "T": 4,
-    "C": 5,
-    "S": 6,
-}
+from Game import Game
+from crocomine.client.crocomine_client import CrocomineClient
 
-def test():
-    m = 10
-    n = 10
-    game = Game(m, n, 0, 0, 0, 0, 0)
-    print(game.get_adjacent_cells(0, 0))
 
-def main():
-    server = "http://localhost:8000"
-    group = "Groupe 1"
-    members = "Victor et Maxime"
-    mine = CrocomineClient(server, group, members)
-
-    total_time = 0
-    total_move = 0
-
-    ko_count = 0
-    gg_count = 0
-    fail = []
-
-    end = True
-
-    status, msg, grid_infos = mine.new_grid()
-    map = msg
-    start_time_grid = time.time()
-    count = 1
-    print(count)
-
+def create_new_grid(mine: CrocomineClient) -> Tuple[bool, Tuple]:
+    status, msg_map, grid_infos = mine.new_grid()
     if status != 'Err':
-        nb_move = 0
         game = Game(
             grid_infos['m'],
             grid_infos['n'],
@@ -50,115 +17,119 @@ def main():
             grid_infos['land_count'],
             grid_infos['sea_count']
         )
-
-    infos = []
-
-    if status != 'GG' and status != 'Err':
         status, msg, infos = mine.discover(grid_infos['start'][0], grid_infos['start'][1])
+        return True, (game, status, msg, infos, msg_map)
+    return False, ()
 
-    while end:
-        print(status, msg, infos)
-        if status == 'Err':
-            end = False
-        elif status == 'GG':
-            gg_count += 1
-            print()
-            print("GRID --- %s seconds ---" % (time.time() - start_time_grid))
-            total_time += time.time() - start_time_grid
-            print("Nombre de coup", nb_move)
-            total_move += nb_move
-            status, msg, grid_infos = mine.new_grid()
-            nb_move = 0
-            map = msg
-            start_time_grid = time.time()
-            count += 1
-            print(count, 'GG')
-            print()
-            print(status, msg, infos)
-            # end = False
-            if end and status != 'Err':
-                game = Game(
-                    grid_infos['m'],
-                    grid_infos['n'],
-                    grid_infos['tiger_count'],
-                    grid_infos['shark_count'],
-                    grid_infos['croco_count'],
-                    grid_infos['land_count'],
-                    grid_infos['sea_count']
-                )
-                status, msg, infos = mine.discover(grid_infos['start'][0], grid_infos['start'][1])
-            else:
-                end = False
-        elif status == 'KO':
-            ko_count += 1
-            fail.append(map)
-            print()
-            print("GRID --- %s seconds ---" % (time.time() - start_time_grid))
-            print("Nombre de coup", nb_move)
-            status, msg, grid_infos = mine.new_grid()
-            nb_move = 0
-            map = msg
-            start_time_grid = time.time()
-            count += 1
-            print(count, 'KO')
-            print()
-            print(status, msg, infos)
-            # end = False
-            if end and status != 'Err':
-                game = Game(
-                    grid_infos['m'],
-                    grid_infos['n'],
-                    grid_infos['tiger_count'],
-                    grid_infos['shark_count'],
-                    grid_infos['croco_count'],
-                    grid_infos['land_count'],
-                    grid_infos['sea_count']
-                )
-                status, msg, infos = mine.discover(grid_infos['start'][0], grid_infos['start'][1])
-            else:
-                end = False
-        elif status == 'OK':
-            nb_move += 1
-            start_time = time.time()
-            for cell in infos:
-                game.add_information_constraints(cell)
-            action, cell = game.make_decision()
-            print("--- %s seconds ---" % (time.time() - start_time))
-            print(action, cell)
-            if action == 'guess':
-                status, msg, infos = mine.guess(cell[0], cell[1], cell[2])
-            elif action == 'discover':
-                status, msg, infos = mine.discover(cell[0], cell[1])
-            elif action == 'chord':
-                status, msg, infos = mine.chord(cell[0], cell[1])
-            else:
-                ko_count += 1
-                fail.append(map)
-                print()
-                print("GRID --- %s seconds ---" % (time.time() - start_time_grid))
-                print("Nombre de coup", nb_move)
-                status, msg, grid_infos = mine.new_grid()
-                nb_move = 0
-                map = msg
-                start_time_grid = time.time()
-                count += 1
-                print(count, 'NONE')
-                print()
+
+def main():
+    server = "http://localhost:8000"
+    group = "Group 1"
+    members = "Victor et Maxime"
+    mine = CrocomineClient(server, group, members)
+
+    DISPLAY = True
+
+    total_time = 0
+    total_move = 0
+
+    ko_count = 0
+    gg_count = 0
+    fail = []
+
+    count = 0
+    nb_move = 0
+
+    new_grid = create_new_grid(mine)
+
+    start_time_grid = time.time()
+
+    end = new_grid[0]
+
+    if end:
+        game, status, msg, infos, msg_map = new_grid[1]
+
+        while end:
+            if DISPLAY:
                 print(status, msg, infos)
-                # end = False
-                if end and status != 'Err':
-                    game = Game(
-                        grid_infos['m'],
-                        grid_infos['n'],
-                        grid_infos['tiger_count'],
-                        grid_infos['shark_count'],
-                        grid_infos['croco_count'],
-                        grid_infos['land_count'],
-                        grid_infos['sea_count']
-                    )
-                    status, msg, infos = mine.discover(grid_infos['start'][0], grid_infos['start'][1])
+            if status == 'Err':
+                # TODO Check errors
+                end = False
+            elif status == 'GG':
+                if DISPLAY:
+                    print()
+                    print("GG")
+                    print("GRID --- %s seconds ---" % (time.time() - start_time_grid))
+                    print("Nombre de coup", nb_move)
+                    print()
+
+                total_time += time.time() - start_time_grid
+                total_move += nb_move
+                gg_count += 1
+
+                new_grid = create_new_grid(mine)
+
+                end = new_grid[0]
+
+                if end:
+                    game, status, msg, infos, msg_map = new_grid[1]
+
+                    nb_move = 0
+                    start_time_grid = time.time()
+                    count += 1
+
+                    if DISPLAY:
+                        print(count)
+                        print()
+            elif status == 'KO':
+                if DISPLAY:
+                    print()
+                    print("KO")
+                    print("GRID --- %s seconds ---" % (time.time() - start_time_grid))
+                    print("Nombre de coup", nb_move)
+                    print()
+
+                total_time += time.time() - start_time_grid
+                total_move += nb_move
+                ko_count += 1
+                fail.append(msg_map)
+
+                new_grid = create_new_grid(mine)
+
+                end = new_grid[0]
+
+                if end:
+                    game, status, msg, infos, msg_map = new_grid[1]
+
+                    nb_move = 0
+                    start_time_grid = time.time()
+                    count += 1
+
+                    if DISPLAY:
+                        print(count)
+                        print()
+            elif status == 'OK':
+                nb_move += 1
+                start_time = time.time()
+
+                for cell in infos:
+                    game.add_information_constraints(cell)
+                action, cell = game.make_decision()
+
+                if DISPLAY:
+                    print("DECISION --- %s seconds ---" % (time.time() - start_time))
+                    print(action, cell)
+
+                if action == 'guess':
+                    status, msg, infos = mine.guess(cell[0], cell[1], cell[2])
+                elif action == 'discover':
+                    status, msg, infos = mine.discover(cell[0], cell[1])
+                elif action == 'chord':
+                    status, msg, infos = mine.chord(cell[0], cell[1])
                 else:
-                    end = False
+                    if DISPLAY:
+                        print("NONE")
+                    status = "KO"
 
     print('WIN:', gg_count)
     print('KO:', ko_count)
