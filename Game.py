@@ -25,8 +25,8 @@ class Game:
         Default constructor
         :param filename: name of the cnf file
         """
-        # A cell is represented by a list ['?', []], the '?' represent the type of the cell ('F', 'T', 'S', 'C') and the [] is the proximity count.
-        self.board = [[['?', []] for _ in range(width)] for _ in range(height)]
+        # A cell is represented by a list ['?', [], '?'], the first '?' represent the type of the cell ('F', 'T', 'S', 'C'), the [] is the proximity count and the last '?' the field.
+        self.board = [[['?', [], '?'] for _ in range(width)] for _ in range(height)]
         self.file = filename
         self.width = width
         self.height = height
@@ -43,10 +43,12 @@ class Game:
                 "guess": 0,
                 "count": crocodile_count
             },
-            "Land": {
+            "land": {
+                "found": 0,
                 "count": land_count
             },
-            "Sea": {
+            "sea": {
+                "found": 0,
                 "count": sea_count
             }
         }
@@ -94,6 +96,7 @@ class Game:
         # Guest all cells we know
         if len(self.guest_moves) > 0:
             return 'guess', self.guest_moves.pop(0)
+        self.remove_useless_clauses()
         discover_moves = []
         # Find a model
         self.write_dimacs_file(self.clauses_to_dimacs(self.clauses, self.height * self.width * length))
@@ -117,11 +120,27 @@ class Game:
             return 'discover', discover_moves[0]
         # If in this case there is no response (fix of none error)
         else:
+            sea_probability = (0 if self.infos["S"]["count"] == self.infos["S"]["guess"] else 1) if self.infos["sea"]["count"] == self.infos["sea"]["found"] else (self.infos["S"]["count"] - self.infos["S"]["guess"]) / (self.infos["sea"]["count"] - self.infos["sea"]["found"])
+            land_probability = (0 if self.infos["T"]["count"] == self.infos["T"]["guess"] else 1) if self.infos["land"]["count"] == self.infos["land"]["found"] else (self.infos["T"]["count"] - self.infos["T"]["guess"]) / (self.infos["land"]["count"] - self.infos["land"]["found"])
+            case_to_land = "sea" if sea_probability < land_probability else "land"
+            random_move = []
+            unsafe_move = []
             # TODO: Improve this part
             for i in range(self.height):
                 for j in range(self.width):
                     if self.board[i][j][0] == '?':
-                        return 'discover', (i, j, 'F')
+                        if self.board[i][j][2] == case_to_land:
+                            return 'discover', (i, j, 'F')
+                        elif self.board[i][j][2] == '?':
+                            random_move.append((i, j))
+                        else:
+                            unsafe_move.append((i, j))
+            if len(random_move) > 0:
+                return 'discover', random_move[0]
+            elif len(unsafe_move) > 0:
+                return 'discover', unsafe_move[0]
+            else:
+                return 'none', ()
 
     def exec_gophersat(self, encoding: str = "utf8") -> Tuple[bool, List[int]]:
         """
@@ -266,14 +285,23 @@ class Game:
         # TODO: Think about it
         for i in range(self.height):
             for j in range(self.width):
-                print()
+                new_clause = []
+                if self.board[i][j][0] != '?':
+                    new_clause.append(self.cell_to_variable(i, j, self.board[i][j][0]))
+                    for key in values_dict:
+                        if key != self.board[i][j][0]:
+                            new_clause.append(-self.cell_to_variable(i, j, key))
+                    for new in new_clause:
+                        for clause in self.clauses:
+                            if new in clause:
+                                self.clauses.remove(clause)
+                        self.clauses.append([new])
 
     def add_information_constraints(self, data: Dict):
         pos = data["pos"]
         field = data["field"]
         proximity_count = data.get("prox_count", None)
         guess_animal = data.get("animal", None)
-        self.clauses.append([-self.cell_to_variable(pos[0], pos[1], "T") if field == "sea" else -self.cell_to_variable(pos[0], pos[1], "S")])
         if guess_animal:
             # Increment guess count
             self.infos[guess_animal]["guess"] += 1
@@ -284,6 +312,11 @@ class Game:
             if self.infos[guess_animal]["count"] - self.infos[guess_animal]["guess"] == 1:
                 self.clauses += self.create_rule_animal_remaining(guess_animal, 1)
         elif proximity_count:
+            if [pos[0], pos[1]] not in self.visitedCells:
+                self.board[pos[0]][pos[1]][2] = field
+                self.clauses.append([-self.cell_to_variable(pos[0], pos[1], "T") if field == "sea" else -self.cell_to_variable(pos[0], pos[1], "S")])
+            # Increment field count
+            self.infos[field]["found"] += 1
             self.board[pos[0]][pos[1]] = ['F', proximity_count]
             self.clauses.append([self.cell_to_variable(pos[0], pos[1], 'F')])
             near_cells = self.get_near_cells(pos[0], pos[1])
@@ -309,3 +342,6 @@ class Game:
             for cell in near_cells:
                 cells.append(self.cell_to_variable(cell[0], cell[1], "F"))
             self.clauses += self.exact(cells, len(near_cells) - total_count)
+        else:
+            self.board[pos[0]][pos[1]][2] = field
+            self.clauses.append([-self.cell_to_variable(pos[0], pos[1], "T") if field == "sea" else -self.cell_to_variable(pos[0], pos[1], "S")])
