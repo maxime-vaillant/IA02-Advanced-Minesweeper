@@ -3,13 +3,13 @@ import subprocess
 from sys import platform
 from typing import List, Tuple, Dict
 
-# F: Free, T: Tiger, C: Crocodile, S: Shark
-values_list = ["F", "T", "C", "S"]
+# F: Free, T: Tiger, S: Shark, C: Crocodile
+values_list = ["F", "T", "S", "C"]
 values_dict = {
     "F": 1,
     "T": 2,
-    "C": 3,
-    "S": 4,
+    "S": 3,
+    "C": 4,
 }
 length = len(values_dict)
 
@@ -25,14 +25,11 @@ class Game:
         Default constructor
         :param filename: name of the cnf file
         """
-        # A cell is represented by a list ['?', []], the '?' represent the type of the cell ('F', 'T', 'S', 'C', 'F') and the [] is the proximity count.
+        # A cell is represented by a list ['?', []], the '?' represent the type of the cell ('F', 'T', 'S', 'C') and the [] is the proximity count.
         self.board = [[['?', []] for _ in range(width)] for _ in range(height)]
         self.file = filename
-        self.cmd = None
         self.width = width
         self.height = height
-        self.sea_count = sea_count
-        self.land_count = land_count
         self.infos = {
             "T": {
                 "guess": 0,
@@ -45,12 +42,19 @@ class Game:
             "C": {
                 "guess": 0,
                 "count": crocodile_count
+            },
+            "Land": {
+                "count": land_count
+            },
+            "Sea": {
+                "count": sea_count
             }
         }
         self.visitedCells = []
         self.clauses = []
         self.cells_infos = {}
         self.guest_moves = []
+        self.cmd = None
         if platform == 'darwin':
             self.cmd = "./gophersat-1.1.6-MacOS"
         elif platform == 'win32':
@@ -69,58 +73,51 @@ class Game:
             print()
         """
         # Cord search
-        for c in self.visitedCells:
+        for v in self.visitedCells:
             # If cell can possibly handle a cord
-            i = c[0]
-            j = c[1]
-            if self.board[i][j][1]:
+            i = v[0]
+            j = v[1]
+            board_cell = self.board[i][j][1]
+            if board_cell:
                 near_cells = self.get_near_cells(i, j)
-                tiger_found = 0
-                shark_found = 0
-                crocodile_found = 0
-                known = 0
+                found_count = {
+                    'F': 0,
+                    'T': 0,
+                    'S': 0,
+                    'C': 0,
+                }
                 for cell in near_cells:
-                    if self.board[cell[0]][cell[1]][0] == 'F':
-                        known += 1
-                    elif self.board[cell[0]][cell[1]][0] == 'T':
-                        tiger_found += 1
-                    elif self.board[cell[0]][cell[1]][0] == 'S':
-                        shark_found += 1
-                    elif self.board[cell[0]][cell[1]][0] == 'C':
-                        crocodile_found += 1
-                if tiger_found == self.board[i][j][1][0] and shark_found == self.board[i][j][1][1] and crocodile_found == self.board[i][j][1][2] and known + tiger_found + shark_found + crocodile_found != len(near_cells):
+                    if self.board[cell[0]][cell[1]][0] != '?':
+                        found_count[self.board[cell[0]][cell[1]][0]] += 1
+                if found_count['T'] == board_cell[0] and found_count['S'] == board_cell[1] and found_count['C'] == board_cell[2] and sum(found_count.values()) != len(near_cells):
                     return 'chord', (i, j)
+        # Guest all cells we know
         if len(self.guest_moves) > 0:
             return 'guess', self.guest_moves.pop(0)
         discover_moves = []
+        # Find a model
         self.write_dimacs_file(self.clauses_to_dimacs(self.clauses, self.height * self.width * length))
         response = self.exec_gophersat()
-        vars = []
         if response[0]:
             for var in response[1]:
                 if var > 0:
                     cell = self.variable_to_cell(var)
                     if self.board[cell[0]][cell[1]][0] == '?':
-                        cell_infos = self.cells_infos.get(str([cell[0], cell[1]]), [0, 1])
-                        score_cell = cell_infos[0] / 8
-                        vars.append([var, cell, score_cell])
-        vars.sort(key=lambda x: x[2], reverse=True)
-        for v in vars:
-            var = v[0]
-            cell = v[1]
-            self.write_dimacs_file(self.clauses_to_dimacs(self.clauses+[[-var]], self.height * self.width * length))
-            deduction = self.exec_gophersat()
-            if not deduction[0]:
-                if cell[2] == 'F':
-                    discover_moves.append(cell)
-                else:
-                    self.guest_moves.append(cell)
-        # If in this case there is no response (fix of none error)
+                        # Try to deduct with UNSAT
+                        self.write_dimacs_file(self.clauses_to_dimacs(self.clauses+[[-var]], self.height * self.width * length))
+                        deduction = self.exec_gophersat()
+                        if not deduction[0]:
+                            if cell[2] == 'F':
+                                discover_moves.append(cell)
+                            else:
+                                self.guest_moves.append(cell)
         if len(self.guest_moves) > 0:
             return 'guess', self.guest_moves.pop(0)
         elif len(discover_moves) > 0:
             return 'discover', discover_moves[0]
+        # If in this case there is no response (fix of none error)
         else:
+            # TODO: Improve this part
             for i in range(self.height):
                 for j in range(self.width):
                     if self.board[i][j][0] == '?':
@@ -177,9 +174,9 @@ class Game:
     def cell_to_variable(self, i: int, j: int, val: str) -> int:
         """
         Transform a cell representation to a variable
-        :param i:
-        :param j:
-        :param val:
+        :param i: 0 <= i < self.height
+        :param j: 0 <= j < self.width
+        :param val: val in ['F', 'T', 'S', 'C']
         :return variable
         """
         return i * self.width * length + j * length + values_dict[val]
@@ -202,7 +199,6 @@ class Game:
 
     def exact(self, vars: List[int], param: int) -> List[List[int]]:
         """
-        Take a list of clauses and remove all duplicates ones
         :param param: number exact
         :param vars: in clauses list
         :return: list of exact number clauses
@@ -217,6 +213,11 @@ class Game:
         return clauses
 
     def get_near_cells(self, i: int, j: int) -> List[List[int]]:
+        """
+        :param i: 0 <= i < self.height
+        :param j: 0 <= j < self.width
+        :return: List of position of near cells
+        """
         cells = []
         for a in range(i - 1, i + 2):
             for b in range(j - 1, j + 2):
@@ -225,6 +226,11 @@ class Game:
         return cells
 
     def get_adjacent_cells(self, i: int, j: int) -> List[List[int]]:
+        """
+        :param i: 0 <= i < self.height
+        :param j: 0 <= j < self.width
+        :return: List of position of adjacent cells
+        """
         cells = []
         for a in range(i - 1, i + 2):
             for b in range(j - 1, j + 2):
@@ -233,12 +239,22 @@ class Game:
         return cells
 
     def create_rule_on_cell(self, i: int, j: int) -> List[List[int]]:
+        """
+        :param i: 0 <= i < self.height
+        :param j: 0 <= j < self.width
+        :return: rules clauses
+        """
         cells = []
         for key in values_dict:
             cells.append(self.cell_to_variable(i, j, key))
         return self.exact(cells, 1)
 
-    def create_rule_last_animal(self, animal: str, param: int) -> List[List[int]]:
+    def create_rule_animal_remaining(self, animal: str, param: int) -> List[List[int]]:
+        """
+        :param animal: animal in ['T', 'S', 'C']
+        :param param: Number remaining
+        :return: clauses
+        """
         cells = []
         for i in range(self.height):
             for j in range(self.width):
@@ -246,32 +262,40 @@ class Game:
                     cells.append(self.cell_to_variable(i, j, animal))
         return self.exact(cells, param)
 
+    def remove_useless_clauses(self):
+        # TODO: Think about it
+        for i in range(self.height):
+            for j in range(self.width):
+                print()
+
     def add_information_constraints(self, data: Dict):
         pos = data["pos"]
         field = data["field"]
-        clauses = [[-self.cell_to_variable(pos[0], pos[1], "T") if field == "sea" else -self.cell_to_variable(pos[0], pos[1], "S")]]
         proximity_count = data.get("prox_count", None)
         guess_animal = data.get("animal", None)
+        self.clauses.append([-self.cell_to_variable(pos[0], pos[1], "T") if field == "sea" else -self.cell_to_variable(pos[0], pos[1], "S")])
         if guess_animal:
             # Increment guess count
             self.infos[guess_animal]["guess"] += 1
+            # Add the guess on the board
             self.board[pos[0]][pos[1]][0] = guess_animal
-            clauses.append([self.cell_to_variable(pos[0], pos[1], guess_animal)])
+            # The following line seems to be useless
+            # clauses.append([self.cell_to_variable(pos[0], pos[1], guess_animal)])
             if self.infos[guess_animal]["count"] - self.infos[guess_animal]["guess"] == 1:
-                clauses += self.create_rule_last_animal(guess_animal, 1)
-        if proximity_count:
+                self.clauses += self.create_rule_animal_remaining(guess_animal, 1)
+        elif proximity_count:
             self.board[pos[0]][pos[1]] = ['F', proximity_count]
-            clauses.append([self.cell_to_variable(pos[0], pos[1], 'F')])
+            self.clauses.append([self.cell_to_variable(pos[0], pos[1], 'F')])
             near_cells = self.get_near_cells(pos[0], pos[1])
             for cell in near_cells:
                 if cell not in self.visitedCells:
                     self.visitedCells.append(cell)
-                    clauses += self.create_rule_on_cell(cell[0], cell[1])
+                    self.clauses += self.create_rule_on_cell(cell[0], cell[1])
                 cell_infos = self.cells_infos.get(str([cell[0], cell[1]]), None)
                 if cell_infos:
-                    self.cells_infos[str([cell[0], cell[1]])][0] += 1
+                    self.cells_infos[str([cell[0], cell[1]])] += 1
                 else:
-                    self.cells_infos[str([cell[0], cell[1]])] = [1, len(self.get_near_cells(cell[0], cell[1]))]
+                    self.cells_infos[str([cell[0], cell[1]])] = 1
             animals = ("T", "S", "C")
             total_count = 0
             for index, count in enumerate(proximity_count):
@@ -280,9 +304,8 @@ class Game:
                 animal = animals[index]
                 for cell in near_cells:
                     cells.append(self.cell_to_variable(cell[0], cell[1], animal))
-                clauses += self.exact(cells, count)
+                self.clauses += self.exact(cells, count)
             cells = []
             for cell in near_cells:
                 cells.append(self.cell_to_variable(cell[0], cell[1], "F"))
-            clauses += self.exact(cells, len(near_cells) - total_count)
-        self.clauses += clauses
+            self.clauses += self.exact(cells, len(near_cells) - total_count)

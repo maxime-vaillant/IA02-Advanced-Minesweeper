@@ -53,7 +53,7 @@ def main():
             if DISPLAY:
                 print(status, msg, infos)
             if status == 'Err':
-                # TODO Check errors
+                # TODO: Check errors
                 end = False
             elif status == 'GG':
                 if DISPLAY:
