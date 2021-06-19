@@ -243,7 +243,7 @@ class Game:
             near_cells = self.get_near_cells(pos[0], pos[1])
             for cell in near_cells:
                 if cell not in self.visitedCells:
-                    self.visitedCells.append(cell)
+                    self.visitedCells.insert(0, cell)
                     self.clauses += self.create_rule_on_cell(cell[0], cell[1])
                 cell_infos = self.cells_infos.get(str([cell[0], cell[1]]), None)
                 if cell_infos:
@@ -279,7 +279,6 @@ class Game:
         """
         # Cord search
         for v in self.visitedCells:
-            # If cell can possibly handle a cord
             i = v[0]
             j = v[1]
             board_cell = self.board[i][j][1]
@@ -294,9 +293,10 @@ class Game:
                 for cell in near_cells:
                     if self.board[cell[0]][cell[1]][0] != '?':
                         found_count[self.board[cell[0]][cell[1]][0]] += 1
+                # If cell can possibly handle a cord
                 if found_count['T'] == board_cell[0] and found_count['S'] == board_cell[1] and found_count['C'] == board_cell[2] and sum(found_count.values()) != len(near_cells):
                     return 'chord', (i, j)
-        # Guest all cells we know
+        # Guess all cells we know
         if len(self.guest_moves) > 0:
             return 'guess', self.guest_moves.pop(0)
         self.remove_useless_clauses()
