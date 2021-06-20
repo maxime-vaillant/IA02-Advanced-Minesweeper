@@ -4,11 +4,6 @@ from typing import Tuple
 from Game import Game
 from crocomine.client.crocomine_client import CrocomineClient
 
-def test():
-    game = Game(10, 10, 0, 0, 0, 0, 0)
-
-    print(game.board)
-
 
 def create_new_grid(mine: CrocomineClient) -> Tuple[bool, Tuple]:
     status, msg_map, grid_infos = mine.new_grid()
