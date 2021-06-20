@@ -67,8 +67,8 @@ class Game:
         }
         self.visitedCells = []
         self.clauses = []
-        self.cells_infos = {}
         self.guest_moves = []
+        self.last_cells = []
         self.last_move = None
         self.cmd = None
         if platform == 'darwin':
@@ -265,14 +265,10 @@ class Game:
             near_cells = self.board[i][j]['near_cells']
             for cell in near_cells:
                 self.board[cell[0]][cell[1]]['known_count']['F'] += 1
+                self.last_cells.append(cell)
                 if cell not in self.visitedCells:
                     self.visitedCells.insert(0, cell)
                     self.clauses += self.create_rule_on_cell(cell[0], cell[1])
-                cell_infos = self.cells_infos.get(str([cell[0], cell[1]]), None)
-                if cell_infos:
-                    self.cells_infos[str([cell[0], cell[1]])] += 1
-                else:
-                    self.cells_infos[str([cell[0], cell[1]])] = 1
             animals = ("T", "S", "C")
             total_count = 0
             for index, count in enumerate(proximity_count):
@@ -291,18 +287,10 @@ class Game:
             self.clauses.append([-self.cell_to_variable(i, j, "T") if field == "sea" else -self.cell_to_variable(i, j, "S")])
 
     def make_decision(self) -> Tuple[str, Tuple]:
-        """ Debug
-        for clause in self.clauses:
-            for c in clause:
-                if c > 0:
-                    print(self.variable_to_cell(c), end='')
-                else:
-                    print(" -", self.variable_to_cell(-c), end='')
-            print()
-        """
         # Guess all cells we know
         if len(self.guest_moves) > 0:
             self.last_move = 'guess'
+            self.last_cells.clear()
             return 'guess', self.guest_moves.pop(0)
         if self.last_move != 'guess':
             if self.height * self.width > 1000:
@@ -314,7 +302,7 @@ class Game:
                 for var in response[1]:
                     if var > 0:
                         cell = self.variable_to_cell(var)
-                        if self.board[cell[0]][cell[1]]["type"] == '?':
+                        if [cell[0], cell[1]] in self.last_cells and self.board[cell[0]][cell[1]]['type'] == '?':
                             # Try to deduct with UNSAT
                             self.write_dimacs_file(
                                 self.clauses_to_dimacs(self.clauses + [[-var]], self.height * self.width * length))
@@ -324,12 +312,14 @@ class Game:
                                     self.guest_moves.append(cell)
             if len(self.guest_moves) > 0:
                 self.last_move = 'guess'
+                self.last_cells.clear()
                 return 'guess', self.guest_moves.pop(0)
         # Cord search
         chord_moves = list(filter(self.filter_chord, self.visitedCells))
         chord_moves.sort(key=lambda x: sum(self.board[x[0]][x[1]]['known_count'].values()) - len(self.board[x[0]][x[1]]['near_cells']))
         if len(chord_moves) > 0:
             self.last_move = 'chord'
+            self.last_cells.clear()
             return 'chord', chord_moves[0]
         # If in this case there is no response (alea case)
         else:
@@ -344,6 +334,7 @@ class Game:
                     if self.board[i][j]['type'] == '?':
                         if self.board[i][j]['field'] == case_to_land:
                             self.last_move = 'discover'
+                            self.last_cells.clear()
                             return 'discover', (i, j, 'F')
                         elif self.board[i][j]['field'] == '?':
                             random_move.append((i, j))
@@ -351,9 +342,11 @@ class Game:
                             unsafe_move.append((i, j))
             if len(random_move) > 0:
                 self.last_move = 'discover'
+                self.last_cells.clear()
                 return 'discover', random_move[0]
             elif len(unsafe_move) > 0:
                 self.last_move = 'discover'
+                self.last_cells.clear()
                 return 'discover', unsafe_move[0]
             else:
                 return 'none', ()
