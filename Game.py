@@ -1,6 +1,5 @@
 import itertools
 import subprocess
-import time
 from sys import platform
 from typing import List, Tuple, Dict
 
@@ -68,7 +67,7 @@ class Game:
         self.visitedCells = []
         self.clauses = []
         self.guest_moves = []
-        self.last_cells = []
+        self.response = []
         self.last_move = None
         self.cmd = None
         if platform == 'darwin':
@@ -242,29 +241,26 @@ class Game:
     def make_guess_move(self) -> Tuple[bool, Tuple]:
         if len(self.guest_moves) > 0:
             self.last_move = 'guess'
-            self.last_cells.clear()
             return True, self.guest_moves.pop(0)
         if self.last_move != 'guess':
             if self.height * self.width > 1000:
                 self.remove_useless_clauses()
             # Find a model
             self.write_dimacs_file(self.clauses_to_dimacs(self.clauses, self.height * self.width * length))
-            response = self.exec_gophersat()
-            if response[0]:
-                for var in response[1]:
+            self.response = self.exec_gophersat()
+            if self.response[0]:
+                for var in self.response[1]:
                     if var > 0:
                         cell = self.variable_to_cell(var)
-                        if [cell[0], cell[1]] in self.last_cells and self.board[cell[0]][cell[1]]['type'] == '?':
+                        if cell[2] != 'F' and self.board[cell[0]][cell[1]]['type'] == '?':
                             # Try to deduct with UNSAT
                             self.write_dimacs_file(
                                 self.clauses_to_dimacs(self.clauses + [[-var]], self.height * self.width * length))
                             deduction = self.exec_gophersat()
                             if not deduction[0]:
-                                if cell[2] != 'F':
-                                    self.guest_moves.append(cell)
+                                self.guest_moves.append(cell)
             if len(self.guest_moves) > 0:
                 self.last_move = 'guess'
-                self.last_cells.clear()
                 return True, self.guest_moves.pop(0)
         return False, ()
 
@@ -274,6 +270,20 @@ class Game:
         if len(chord_moves) > 0:
             self.last_move = 'chord'
             return True, chord_moves[0]
+        return False, ()
+
+    def make_discover_move(self) -> Tuple[bool, Tuple]:
+        if self.response[0]:
+            for var in self.response[1]:
+                if var > 0:
+                    cell = self.variable_to_cell(var)
+                    if cell[2] == 'F' and self.board[cell[0]][cell[1]]['type'] == '?':
+                        # Try to deduct with UNSAT
+                        self.write_dimacs_file(
+                            self.clauses_to_dimacs(self.clauses + [[-var]], self.height * self.width * length))
+                        deduction = self.exec_gophersat()
+                        if not deduction[0]:
+                            return True, cell
         return False, ()
 
     def make_random_move(self) -> Tuple[bool, Tuple]:
@@ -288,7 +298,6 @@ class Game:
                 if self.board[i][j]['type'] == '?':
                     if self.board[i][j]['field'] == case_to_land:
                         self.last_move = 'discover'
-                        self.last_cells.clear()
                         return True, (i, j)
                     elif self.board[i][j]['field'] == '?':
                         random_move.append((i, j))
@@ -296,11 +305,9 @@ class Game:
                         unsafe_move.append((i, j))
         if len(random_move) > 0:
             self.last_move = 'discover'
-            self.last_cells.clear()
             return True, random_move[0]
         elif len(unsafe_move) > 0:
             self.last_move = 'discover'
-            self.last_cells.clear()
             return True, unsafe_move[0]
         return False, ()
 
@@ -330,7 +337,6 @@ class Game:
             near_cells = self.board[i][j]['near_cells']
             for cell in near_cells:
                 self.board[cell[0]][cell[1]]['known_count']['F'] += 1
-                self.last_cells.append(cell)
                 if cell not in self.visitedCells:
                     self.visitedCells.insert(0, cell)
                     self.clauses += self.create_rule_on_cell(cell[0], cell[1])
@@ -366,6 +372,9 @@ class Game:
             chord = self.make_chord_move()
             if chord[0]:
                 return 'chord', chord[1]
+        discover = self.make_discover_move()
+        if discover[0]:
+            return 'discover', discover[1]
         random = self.make_random_move()
         if random[0]:
             return 'discover', random[1]
