@@ -239,6 +239,71 @@ class Game:
             return True
         return False
 
+    def make_guess_move(self) -> Tuple[bool, Tuple]:
+        if len(self.guest_moves) > 0:
+            self.last_move = 'guess'
+            self.last_cells.clear()
+            return True, self.guest_moves.pop(0)
+        if self.last_move != 'guess':
+            if self.height * self.width > 1000:
+                self.remove_useless_clauses()
+            # Find a model
+            self.write_dimacs_file(self.clauses_to_dimacs(self.clauses, self.height * self.width * length))
+            response = self.exec_gophersat()
+            if response[0]:
+                for var in response[1]:
+                    if var > 0:
+                        cell = self.variable_to_cell(var)
+                        if [cell[0], cell[1]] in self.last_cells and self.board[cell[0]][cell[1]]['type'] == '?':
+                            # Try to deduct with UNSAT
+                            self.write_dimacs_file(
+                                self.clauses_to_dimacs(self.clauses + [[-var]], self.height * self.width * length))
+                            deduction = self.exec_gophersat()
+                            if not deduction[0]:
+                                if cell[2] != 'F':
+                                    self.guest_moves.append(cell)
+            if len(self.guest_moves) > 0:
+                self.last_move = 'guess'
+                self.last_cells.clear()
+                return True, self.guest_moves.pop(0)
+        return False, ()
+
+    def make_chord_move(self) -> Tuple[bool, Tuple]:
+        chord_moves = list(filter(self.filter_chord, self.visitedCells))
+        chord_moves.sort(key=lambda x: sum(self.board[x[0]][x[1]]['known_count'].values()) - len(self.board[x[0]][x[1]]['near_cells']))
+        if len(chord_moves) > 0:
+            self.last_move = 'chord'
+            return True, chord_moves[0]
+        return False, ()
+
+    def make_random_move(self) -> Tuple[bool, Tuple]:
+        sea_probability = (0 if self.infos["S"]["count"] == self.infos["S"]["guess"] else 1) if self.infos["sea"]["count"] == self.infos["sea"]["found"] else (self.infos["S"]["count"] - self.infos["S"]["guess"]) / (self.infos["sea"]["count"] - self.infos["sea"]["found"])
+        land_probability = (0 if self.infos["T"]["count"] == self.infos["T"]["guess"] else 1) if self.infos["land"]["count"] == self.infos["land"]["found"] else (self.infos["T"]["count"] - self.infos["T"]["guess"]) / (self.infos["land"]["count"] - self.infos["land"]["found"])
+        case_to_land = "sea" if sea_probability < land_probability else "land"
+        random_move = []
+        unsafe_move = []
+        # TODO: Improve this part
+        for i in range(self.height):
+            for j in range(self.width):
+                if self.board[i][j]['type'] == '?':
+                    if self.board[i][j]['field'] == case_to_land:
+                        self.last_move = 'discover'
+                        self.last_cells.clear()
+                        return True, (i, j)
+                    elif self.board[i][j]['field'] == '?':
+                        random_move.append((i, j))
+                    else:
+                        unsafe_move.append((i, j))
+        if len(random_move) > 0:
+            self.last_move = 'discover'
+            self.last_cells.clear()
+            return True, random_move[0]
+        elif len(unsafe_move) > 0:
+            self.last_move = 'discover'
+            self.last_cells.clear()
+            return True, unsafe_move[0]
+        return False, ()
+
     def add_information_constraints(self, data: Dict):
         i, j = data['pos']
         field = data['field']
@@ -287,66 +352,20 @@ class Game:
             self.clauses.append([-self.cell_to_variable(i, j, "T") if field == "sea" else -self.cell_to_variable(i, j, "S")])
 
     def make_decision(self) -> Tuple[str, Tuple]:
-        # Guess all cells we know
-        if len(self.guest_moves) > 0:
-            self.last_move = 'guess'
-            self.last_cells.clear()
-            return 'guess', self.guest_moves.pop(0)
-        if self.last_move != 'guess':
-            if self.height * self.width > 1000:
-                self.remove_useless_clauses()
-            # Find a model
-            self.write_dimacs_file(self.clauses_to_dimacs(self.clauses, self.height * self.width * length))
-            response = self.exec_gophersat()
-            if response[0]:
-                for var in response[1]:
-                    if var > 0:
-                        cell = self.variable_to_cell(var)
-                        if [cell[0], cell[1]] in self.last_cells and self.board[cell[0]][cell[1]]['type'] == '?':
-                            # Try to deduct with UNSAT
-                            self.write_dimacs_file(
-                                self.clauses_to_dimacs(self.clauses + [[-var]], self.height * self.width * length))
-                            deduction = self.exec_gophersat()
-                            if not deduction[0]:
-                                if cell[2] != 'F':
-                                    self.guest_moves.append(cell)
-            if len(self.guest_moves) > 0:
-                self.last_move = 'guess'
-                self.last_cells.clear()
-                return 'guess', self.guest_moves.pop(0)
-        # Cord search
-        chord_moves = list(filter(self.filter_chord, self.visitedCells))
-        chord_moves.sort(key=lambda x: sum(self.board[x[0]][x[1]]['known_count'].values()) - len(self.board[x[0]][x[1]]['near_cells']))
-        if len(chord_moves) > 0:
-            self.last_move = 'chord'
-            self.last_cells.clear()
-            return 'chord', chord_moves[0]
-        # If in this case there is no response (alea case)
+        if self.height * self.width > 500:
+            chord = self.make_chord_move()
+            if chord[0]:
+                return 'chord', chord[1]
+            guess = self.make_guess_move()
+            if guess[0]:
+                return 'guess', guess[1]
         else:
-            sea_probability = (0 if self.infos["S"]["count"] == self.infos["S"]["guess"] else 1) if self.infos["sea"]["count"] == self.infos["sea"]["found"] else (self.infos["S"]["count"] - self.infos["S"]["guess"]) / (self.infos["sea"]["count"] - self.infos["sea"]["found"])
-            land_probability = (0 if self.infos["T"]["count"] == self.infos["T"]["guess"] else 1) if self.infos["land"]["count"] == self.infos["land"]["found"] else (self.infos["T"]["count"] - self.infos["T"]["guess"]) / (self.infos["land"]["count"] - self.infos["land"]["found"])
-            case_to_land = "sea" if sea_probability < land_probability else "land"
-            random_move = []
-            unsafe_move = []
-            # TODO: Improve this part
-            for i in range(self.height):
-                for j in range(self.width):
-                    if self.board[i][j]['type'] == '?':
-                        if self.board[i][j]['field'] == case_to_land:
-                            self.last_move = 'discover'
-                            self.last_cells.clear()
-                            return 'discover', (i, j, 'F')
-                        elif self.board[i][j]['field'] == '?':
-                            random_move.append((i, j))
-                        else:
-                            unsafe_move.append((i, j))
-            if len(random_move) > 0:
-                self.last_move = 'discover'
-                self.last_cells.clear()
-                return 'discover', random_move[0]
-            elif len(unsafe_move) > 0:
-                self.last_move = 'discover'
-                self.last_cells.clear()
-                return 'discover', unsafe_move[0]
-            else:
-                return 'none', ()
+            guess = self.make_guess_move()
+            if guess[0]:
+                return 'guess', guess[1]
+            chord = self.make_chord_move()
+            if chord[0]:
+                return 'chord', chord[1]
+        random = self.make_random_move()
+        if random[0]:
+            return 'discover', random[1]
