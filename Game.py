@@ -1,5 +1,6 @@
 import itertools
 import subprocess
+import time
 from sys import platform
 from typing import List, Tuple, Dict
 
@@ -25,22 +26,21 @@ class Game:
         Default constructor
         :param filename: name of the cnf file
         """
-        # A cell is represented by a list ['?', [], '?', ()]
-        # '?' represent the type of the cell ('F', 'T', 'S', 'C')
-        # [] is the proximity count
-        # '?' the field
-        # () is the count of guess animals and known cells: (x, y, z, a, b) x: tiger, y: shark, z: croco, a: known, b: len(near_cells)
-        # self.board = [[['?', [], '?', (0, 0, 0, 0, len(self.get_near_cells(i, j)))] for i in range(width)] for j in range(height)]
         self.width = width
         self.height = height
         self.file = filename
         self.board = [
             [{
-                "type": None,
-                "field": None,
-                "prox_count": [],
-                "known_count": [],
-                "near_cells_count": len(self.get_near_cells(i, j))
+                'type': '?',
+                'field': '?',
+                'prox_count': [],
+                'known_count': {
+                    'T': 0,
+                    'S': 0,
+                    'C': 0,
+                    'F': 0
+                },
+                'near_cells': self.get_near_cells(i, j)
             } for j in range(width)] for i in range(height)
         ]
         self.infos = {
@@ -232,29 +232,39 @@ class Game:
                                 self.clauses.remove(clause)
                         self.clauses.append([new])
 
+    def filter_chord(self, item) -> bool:
+        i, j = item
+        cell = self.board[i][j]
+        if cell['prox_count'] and sum(cell['prox_count']) == sum(cell['known_count'].values()) - cell['known_count']['F'] and sum(cell['known_count'].values()) != len(cell['near_cells']):
+            return True
+        return False
+
     def add_information_constraints(self, data: Dict):
-        pos = data["pos"]
-        field = data["field"]
-        proximity_count = data.get("prox_count", None)
-        guess_animal = data.get("animal", None)
+        i, j = data['pos']
+        field = data['field']
+        proximity_count = data.get('prox_count', None)
+        guess_animal = data.get('animal', None)
         if guess_animal:
             # Increment guess count
-            self.infos[guess_animal]["guess"] += 1
+            self.infos[guess_animal]['guess'] += 1
             # Add the guess on the board
-            self.board[pos[0]][pos[1]]["type"] = guess_animal
-            if self.infos[guess_animal]["count"] - self.infos[guess_animal]["guess"] == 1:
+            self.board[i][j]['type'] = guess_animal
+            for cell in self.board[i][j]['near_cells']:
+                self.board[cell[0]][cell[1]]['known_count'][guess_animal] += 1
+            if self.infos[guess_animal]['count'] - self.infos[guess_animal]['guess'] == 1:
                 self.clauses += self.create_rule_animal_remaining(guess_animal, 1)
         elif proximity_count:
-            if [pos[0], pos[1]] not in self.visitedCells:
-                self.board[pos[0]][pos[1]]["field"] = field
-                self.clauses.append([-self.cell_to_variable(pos[0], pos[1], "T") if field == "sea" else -self.cell_to_variable(pos[0], pos[1], "S")])
+            if [i, j] not in self.visitedCells:
+                self.board[i][j]['field'] = field
+                self.clauses.append([-self.cell_to_variable(i, j, "T") if field == "sea" else -self.cell_to_variable(i, j, "S")])
             # Increment field count
-            self.infos[field]["found"] += 1
-            self.board[pos[0]][pos[1]]["type"] = 'F'
-            self.board[pos[0]][pos[1]]["prox_count"] = proximity_count
-            self.clauses.append([self.cell_to_variable(pos[0], pos[1], 'F')])
-            near_cells = self.get_near_cells(pos[0], pos[1])
+            self.infos[field]['found'] += 1
+            self.board[i][j]['type'] = 'F'
+            self.board[i][j]['prox_count'] = proximity_count
+            self.clauses.append([self.cell_to_variable(i, j, 'F')])
+            near_cells = self.board[i][j]['near_cells']
             for cell in near_cells:
+                self.board[cell[0]][cell[1]]['known_count']['F'] += 1
                 if cell not in self.visitedCells:
                     self.visitedCells.insert(0, cell)
                     self.clauses += self.create_rule_on_cell(cell[0], cell[1])
@@ -277,8 +287,8 @@ class Game:
                 cells.append(self.cell_to_variable(cell[0], cell[1], "F"))
             self.clauses += self.exact(cells, len(near_cells) - total_count)
         else:
-            self.board[pos[0]][pos[1]]["field"] = field
-            self.clauses.append([-self.cell_to_variable(pos[0], pos[1], "T") if field == "sea" else -self.cell_to_variable(pos[0], pos[1], "S")])
+            self.board[i][j]['field'] = field
+            self.clauses.append([-self.cell_to_variable(i, j, "T") if field == "sea" else -self.cell_to_variable(i, j, "S")])
 
     def make_decision(self) -> Tuple[str, Tuple]:
         """ Debug
@@ -291,7 +301,6 @@ class Game:
             print()
         """
         # Guess all cells we know
-        print(self.guest_moves, self.last_move)
         if len(self.guest_moves) > 0:
             self.last_move = 'guess'
             return 'guess', self.guest_moves.pop(0)
@@ -305,7 +314,7 @@ class Game:
                 for var in response[1]:
                     if var > 0:
                         cell = self.variable_to_cell(var)
-                        if self.board[cell[0]][cell[1]]["type"] is None:
+                        if self.board[cell[0]][cell[1]]["type"] == '?':
                             # Try to deduct with UNSAT
                             self.write_dimacs_file(
                                 self.clauses_to_dimacs(self.clauses + [[-var]], self.height * self.width * length))
@@ -317,26 +326,8 @@ class Game:
                 self.last_move = 'guess'
                 return 'guess', self.guest_moves.pop(0)
         # Cord search
-        chord_moves = []
-        for v in self.visitedCells:
-            i = v[0]
-            j = v[1]
-            board_cell = self.board[i][j]['prox_count']
-            if board_cell:
-                near_cells = self.get_near_cells(i, j)
-                found_count = {
-                    'F': 0,
-                    'T': 0,
-                    'S': 0,
-                    'C': 0,
-                }
-                for cell in near_cells:
-                    if self.board[cell[0]][cell[1]]["type"]:
-                        found_count[self.board[cell[0]][cell[1]]["type"]] += 1
-                # If cell can possibly handle a cord
-                if found_count['T'] == board_cell[0] and found_count['S'] == board_cell[1] and found_count['C'] == board_cell[2] and sum(found_count.values()) != len(near_cells):
-                    chord_moves.append((i, j, sum(found_count.values()) - len(near_cells)))
-        chord_moves.sort(key=lambda x: x[2])
+        chord_moves = list(filter(self.filter_chord, self.visitedCells))
+        chord_moves.sort(key=lambda x: sum(self.board[x[0]][x[1]]['known_count'].values()) - len(self.board[x[0]][x[1]]['near_cells']))
         if len(chord_moves) > 0:
             self.last_move = 'chord'
             return 'chord', chord_moves[0]
@@ -350,11 +341,11 @@ class Game:
             # TODO: Improve this part
             for i in range(self.height):
                 for j in range(self.width):
-                    if self.board[i][j]["type"] is None:
-                        if self.board[i][j]["field"] == case_to_land:
+                    if self.board[i][j]['type'] == '?':
+                        if self.board[i][j]['field'] == case_to_land:
                             self.last_move = 'discover'
                             return 'discover', (i, j, 'F')
-                        elif self.board[i][j]["field"] is None:
+                        elif self.board[i][j]['field'] == '?':
                             random_move.append((i, j))
                         else:
                             unsafe_move.append((i, j))
