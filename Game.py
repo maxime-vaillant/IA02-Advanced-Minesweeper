@@ -25,11 +25,24 @@ class Game:
         Default constructor
         :param filename: name of the cnf file
         """
-        # A cell is represented by a list ['?', [], '?'], the first '?' represent the type of the cell ('F', 'T', 'S', 'C'), the [] is the proximity count and the last '?' the field.
-        self.board = [[['?', [], '?'] for _ in range(width)] for _ in range(height)]
-        self.file = filename
+        # A cell is represented by a list ['?', [], '?', ()]
+        # '?' represent the type of the cell ('F', 'T', 'S', 'C')
+        # [] is the proximity count
+        # '?' the field
+        # () is the count of guess animals and known cells: (x, y, z, a, b) x: tiger, y: shark, z: croco, a: known, b: len(near_cells)
+        # self.board = [[['?', [], '?', (0, 0, 0, 0, len(self.get_near_cells(i, j)))] for i in range(width)] for j in range(height)]
         self.width = width
         self.height = height
+        self.file = filename
+        self.board = [
+            [{
+                "type": None,
+                "field": None,
+                "prox_count": [],
+                "known_count": [],
+                "near_cells_count": len(self.get_near_cells(i, j))
+            } for j in range(width)] for i in range(height)
+        ]
         self.infos = {
             "T": {
                 "guess": 0,
@@ -56,6 +69,7 @@ class Game:
         self.clauses = []
         self.cells_infos = {}
         self.guest_moves = []
+        self.last_move = None
         self.cmd = None
         if platform == 'darwin':
             self.cmd = "./gophersat/gophersat-1.1.6-MacOS"
@@ -199,7 +213,7 @@ class Game:
         cells = []
         for i in range(self.height):
             for j in range(self.width):
-                if self.board[i][j][0] == '?':
+                if self.board[i][j]['type'] == '?':
                     cells.append(self.cell_to_variable(i, j, animal))
         return self.exact(cells, param)
 
@@ -207,10 +221,10 @@ class Game:
         for i in range(self.height):
             for j in range(self.width):
                 new_clauses = []
-                if self.board[i][j][0] != '?':
-                    new_clauses.append(self.cell_to_variable(i, j, self.board[i][j][0]))
+                if self.board[i][j]['type'] != '?':
+                    new_clauses.append(self.cell_to_variable(i, j, self.board[i][j]['type']))
                     for key in values_dict:
-                        if key != self.board[i][j][0]:
+                        if key != self.board[i][j]['type']:
                             new_clauses.append(-self.cell_to_variable(i, j, key))
                     for new in new_clauses:
                         for clause in self.clauses:
@@ -227,18 +241,17 @@ class Game:
             # Increment guess count
             self.infos[guess_animal]["guess"] += 1
             # Add the guess on the board
-            self.board[pos[0]][pos[1]][0] = guess_animal
-            # The following line seems to be useless
-            # clauses.append([self.cell_to_variable(pos[0], pos[1], guess_animal)])
+            self.board[pos[0]][pos[1]]["type"] = guess_animal
             if self.infos[guess_animal]["count"] - self.infos[guess_animal]["guess"] == 1:
                 self.clauses += self.create_rule_animal_remaining(guess_animal, 1)
         elif proximity_count:
             if [pos[0], pos[1]] not in self.visitedCells:
-                self.board[pos[0]][pos[1]][2] = field
+                self.board[pos[0]][pos[1]]["field"] = field
                 self.clauses.append([-self.cell_to_variable(pos[0], pos[1], "T") if field == "sea" else -self.cell_to_variable(pos[0], pos[1], "S")])
             # Increment field count
             self.infos[field]["found"] += 1
-            self.board[pos[0]][pos[1]] = ['F', proximity_count]
+            self.board[pos[0]][pos[1]]["type"] = 'F'
+            self.board[pos[0]][pos[1]]["prox_count"] = proximity_count
             self.clauses.append([self.cell_to_variable(pos[0], pos[1], 'F')])
             near_cells = self.get_near_cells(pos[0], pos[1])
             for cell in near_cells:
@@ -264,7 +277,7 @@ class Game:
                 cells.append(self.cell_to_variable(cell[0], cell[1], "F"))
             self.clauses += self.exact(cells, len(near_cells) - total_count)
         else:
-            self.board[pos[0]][pos[1]][2] = field
+            self.board[pos[0]][pos[1]]["field"] = field
             self.clauses.append([-self.cell_to_variable(pos[0], pos[1], "T") if field == "sea" else -self.cell_to_variable(pos[0], pos[1], "S")])
 
     def make_decision(self) -> Tuple[str, Tuple]:
@@ -277,11 +290,38 @@ class Game:
                     print(" -", self.variable_to_cell(-c), end='')
             print()
         """
+        # Guess all cells we know
+        print(self.guest_moves, self.last_move)
+        if len(self.guest_moves) > 0:
+            self.last_move = 'guess'
+            return 'guess', self.guest_moves.pop(0)
+        if self.last_move != 'guess':
+            if self.height * self.width > 1000:
+                self.remove_useless_clauses()
+            # Find a model
+            self.write_dimacs_file(self.clauses_to_dimacs(self.clauses, self.height * self.width * length))
+            response = self.exec_gophersat()
+            if response[0]:
+                for var in response[1]:
+                    if var > 0:
+                        cell = self.variable_to_cell(var)
+                        if self.board[cell[0]][cell[1]]["type"] is None:
+                            # Try to deduct with UNSAT
+                            self.write_dimacs_file(
+                                self.clauses_to_dimacs(self.clauses + [[-var]], self.height * self.width * length))
+                            deduction = self.exec_gophersat()
+                            if not deduction[0]:
+                                if cell[2] != 'F':
+                                    self.guest_moves.append(cell)
+            if len(self.guest_moves) > 0:
+                self.last_move = 'guess'
+                return 'guess', self.guest_moves.pop(0)
         # Cord search
+        chord_moves = []
         for v in self.visitedCells:
             i = v[0]
             j = v[1]
-            board_cell = self.board[i][j][1]
+            board_cell = self.board[i][j]['prox_count']
             if board_cell:
                 near_cells = self.get_near_cells(i, j)
                 found_count = {
@@ -291,37 +331,16 @@ class Game:
                     'C': 0,
                 }
                 for cell in near_cells:
-                    if self.board[cell[0]][cell[1]][0] != '?':
-                        found_count[self.board[cell[0]][cell[1]][0]] += 1
+                    if self.board[cell[0]][cell[1]]["type"]:
+                        found_count[self.board[cell[0]][cell[1]]["type"]] += 1
                 # If cell can possibly handle a cord
                 if found_count['T'] == board_cell[0] and found_count['S'] == board_cell[1] and found_count['C'] == board_cell[2] and sum(found_count.values()) != len(near_cells):
-                    return 'chord', (i, j)
-        # Guess all cells we know
-        if len(self.guest_moves) > 0:
-            return 'guess', self.guest_moves.pop(0)
-        self.remove_useless_clauses()
-        discover_moves = []
-        # Find a model
-        self.write_dimacs_file(self.clauses_to_dimacs(self.clauses, self.height * self.width * length))
-        response = self.exec_gophersat()
-        if response[0]:
-            for var in response[1]:
-                if var > 0:
-                    cell = self.variable_to_cell(var)
-                    if self.board[cell[0]][cell[1]][0] == '?':
-                        # Try to deduct with UNSAT
-                        self.write_dimacs_file(self.clauses_to_dimacs(self.clauses+[[-var]], self.height * self.width * length))
-                        deduction = self.exec_gophersat()
-                        if not deduction[0]:
-                            if cell[2] == 'F':
-                                discover_moves.append(cell)
-                            else:
-                                self.guest_moves.append(cell)
-        if len(self.guest_moves) > 0:
-            return 'guess', self.guest_moves.pop(0)
-        elif len(discover_moves) > 0:
-            return 'discover', discover_moves[0]
-        # If in this case there is no response (fix of none error)
+                    chord_moves.append((i, j, sum(found_count.values()) - len(near_cells)))
+        chord_moves.sort(key=lambda x: x[2])
+        if len(chord_moves) > 0:
+            self.last_move = 'chord'
+            return 'chord', chord_moves[0]
+        # If in this case there is no response (alea case)
         else:
             sea_probability = (0 if self.infos["S"]["count"] == self.infos["S"]["guess"] else 1) if self.infos["sea"]["count"] == self.infos["sea"]["found"] else (self.infos["S"]["count"] - self.infos["S"]["guess"]) / (self.infos["sea"]["count"] - self.infos["sea"]["found"])
             land_probability = (0 if self.infos["T"]["count"] == self.infos["T"]["guess"] else 1) if self.infos["land"]["count"] == self.infos["land"]["found"] else (self.infos["T"]["count"] - self.infos["T"]["guess"]) / (self.infos["land"]["count"] - self.infos["land"]["found"])
@@ -331,16 +350,19 @@ class Game:
             # TODO: Improve this part
             for i in range(self.height):
                 for j in range(self.width):
-                    if self.board[i][j][0] == '?':
-                        if self.board[i][j][2] == case_to_land:
+                    if self.board[i][j]["type"] is None:
+                        if self.board[i][j]["field"] == case_to_land:
+                            self.last_move = 'discover'
                             return 'discover', (i, j, 'F')
-                        elif self.board[i][j][2] == '?':
+                        elif self.board[i][j]["field"] is None:
                             random_move.append((i, j))
                         else:
                             unsafe_move.append((i, j))
             if len(random_move) > 0:
+                self.last_move = 'discover'
                 return 'discover', random_move[0]
             elif len(unsafe_move) > 0:
+                self.last_move = 'discover'
                 return 'discover', unsafe_move[0]
             else:
                 return 'none', ()
