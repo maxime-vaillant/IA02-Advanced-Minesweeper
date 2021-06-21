@@ -68,7 +68,7 @@ class Game:
         self.clauses = []
         self.guest_moves = []
         self.response = []
-        self.last_move = None
+        self.refresh_guess = True
         self.cmd = None
         if platform == 'darwin':
             self.cmd = "./gophersat/gophersat-1.1.6-MacOS"
@@ -240,9 +240,9 @@ class Game:
 
     def make_guess_move(self) -> Tuple[bool, Tuple]:
         if len(self.guest_moves) > 0:
-            self.last_move = 'guess'
             return True, self.guest_moves.pop(0)
-        if self.last_move != 'guess':
+        if self.refresh_guess:
+            self.refresh_guess = False
             if self.height * self.width > 1000:
                 self.remove_useless_clauses()
             # Find a model
@@ -260,7 +260,6 @@ class Game:
                             if not deduction[0]:
                                 self.guest_moves.append(cell)
             if len(self.guest_moves) > 0:
-                self.last_move = 'guess'
                 return True, self.guest_moves.pop(0)
         return False, ()
 
@@ -268,7 +267,7 @@ class Game:
         chord_moves = list(filter(self.filter_chord, self.visitedCells))
         chord_moves.sort(key=lambda x: sum(self.board[x[0]][x[1]]['known_count'].values()) - len(self.board[x[0]][x[1]]['near_cells']))
         if len(chord_moves) > 0:
-            self.last_move = 'chord'
+            self.refresh_guess = True
             return True, chord_moves[0]
         return False, ()
 
@@ -297,17 +296,17 @@ class Game:
             for j in range(self.width):
                 if self.board[i][j]['type'] == '?':
                     if self.board[i][j]['field'] == case_to_land:
-                        self.last_move = 'discover'
+                        self.refresh_guess = True
                         return True, (i, j)
                     elif self.board[i][j]['field'] == '?':
                         random_move.append((i, j))
                     else:
                         unsafe_move.append((i, j))
         if len(random_move) > 0:
-            self.last_move = 'discover'
+            self.refresh_guess = True
             return True, random_move[0]
         elif len(unsafe_move) > 0:
-            self.last_move = 'discover'
+            self.refresh_guess = True
             return True, unsafe_move[0]
         return False, ()
 
@@ -325,6 +324,7 @@ class Game:
                 self.board[cell[0]][cell[1]]['known_count'][guess_animal] += 1
             if self.infos[guess_animal]['count'] - self.infos[guess_animal]['guess'] == 1:
                 self.clauses += self.create_rule_animal_remaining(guess_animal, 1)
+                self.refresh_guess = True
         elif proximity_count:
             if [i, j] not in self.visitedCells:
                 self.board[i][j]['field'] = field
@@ -358,7 +358,7 @@ class Game:
             self.clauses.append([-self.cell_to_variable(i, j, "T") if field == "sea" else -self.cell_to_variable(i, j, "S")])
 
     def make_decision(self) -> Tuple[str, Tuple]:
-        if self.height * self.width > 500:
+        if self.height * self.width > 2000:
             chord = self.make_chord_move()
             if chord[0]:
                 return 'chord', chord[1]
