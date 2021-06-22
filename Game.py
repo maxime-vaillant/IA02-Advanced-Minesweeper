@@ -1,5 +1,6 @@
 import itertools
 import subprocess
+from math import comb
 from sys import platform
 from typing import List, Tuple, Dict
 import pycryptosat as pysat
@@ -12,6 +13,7 @@ values_dict = {
     "S": 3,
     "C": 4,
 }
+animals = ("T", "S", "C")
 length = len(values_dict)
 
 
@@ -21,15 +23,13 @@ class Game:
     """
 
     def __init__(self, height: int, width: int, tiger_count: int, shark_count: int, crocodile_count: int,
-                 land_count: int, sea_count: int, filename: str = "default.cnf"):
+                 land_count: int, sea_count: int):
         """
         Default constructor
-        :param filename: name of the cnf file
         """
         self.solver = pysat.Solver()
         self.width = width
         self.height = height
-        self.file = filename
         self.board = [
             [{
                 'type': '?',
@@ -72,61 +72,6 @@ class Game:
         self.response = []
         self.last_cells_visited = []
         self.refresh_guess = True
-        self.cmd = None
-        if platform == 'darwin':
-            self.cmd = "./gophersat/gophersat-1.1.6-MacOS"
-        elif platform == 'win32':
-            self.cmd = "./gophersat/gophersat-1.1.6-Windows"
-        elif platform == 'linux':
-            self.cmd = "./gophersat/gophersat-1.1.6-Linux"
-
-    def exec_gophersat(self, encoding: str = "utf8") -> Tuple[bool, List[int]]:
-        """
-        Execute the current clauses
-        :param encoding: encoding type
-        :return: model results
-        """
-        if self.cmd:
-            result = subprocess.run(
-                [self.cmd, self.file], capture_output=True, check=True, encoding=encoding
-            )
-            string = str(result.stdout)
-            lines = string.splitlines()
-
-            if lines[1] != "s SATISFIABLE":
-                return False, []
-
-            model = lines[2][2:].split(" ")
-
-            return True, [int(x) for x in model]
-        else:
-            print("Votre système d'exploitation n'est pas compatible")
-            return False, []
-
-    def write_dimacs_file(self, dimacs: str):
-        """
-        Write into the cnf file the new clauses
-        :param dimacs: new clauses
-        """
-        with open(self.file, "w", newline="") as cnf:
-            cnf.write(dimacs)
-
-    @staticmethod
-    def clauses_to_dimacs(clauses: List[List[int]], nb_vars: int) -> str:
-        """
-        Change clauses to their dimacs value
-        :param clauses: List of clauses
-        :param nb_vars: number vars in the dimacs
-        :return: dimacs value
-        """
-        end = "0\n"
-        space = " "
-        dimacs = "p cnf " + str(nb_vars) + space + str(len(clauses)) + "\n"
-        for clause in clauses:
-            for atom in clause:
-                dimacs += str(atom) + space
-            dimacs += end
-        return dimacs
 
     def cell_to_variable(self, i: int, j: int, val: str) -> int:
         """
@@ -218,21 +163,6 @@ class Game:
                 if self.board[i][j]['type'] == '?':
                     cells.append(self.cell_to_variable(i, j, animal))
         return self.exact(cells, param)
-
-    def remove_useless_clauses(self):
-        for i in range(self.height):
-            for j in range(self.width):
-                new_clauses = []
-                if self.board[i][j]['type'] != '?':
-                    new_clauses.append(self.cell_to_variable(i, j, self.board[i][j]['type']))
-                    for key in values_dict:
-                        if key != self.board[i][j]['type']:
-                            new_clauses.append(-self.cell_to_variable(i, j, key))
-                    for new in new_clauses:
-                        for clause in self.clauses:
-                            if new in clause:
-                                self.clauses.remove(clause)
-                        self.clauses.append([new])
 
     def filter_chord(self, item) -> bool:
         i, j = item
@@ -331,9 +261,6 @@ class Game:
             self.board[i][j]['type'] = guess_animal
             for cell in self.board[i][j]['near_cells']:
                 self.board[cell[0]][cell[1]]['known_count'][guess_animal] += 1
-            if self.infos[guess_animal]['count'] - self.infos[guess_animal]['guess'] == 1:
-                self.solver.add_clauses(self.create_rule_animal_remaining(guess_animal, 1))
-                self.refresh_guess = True
         elif proximity_count:
             if [i, j] not in self.visitedCells:
                 self.solver.add_clause([-self.cell_to_variable(i, j, "T") if field == "sea" else -self.cell_to_variable(i, j, "S")])
@@ -347,7 +274,6 @@ class Game:
                 if cell not in self.visitedCells:
                     self.visitedCells.insert(0, cell)
                     self.solver.add_clauses(self.create_rule_on_cell(cell[0], cell[1]))
-            animals = ("T", "S", "C")
             total_count = 0
             for index, count in enumerate(proximity_count):
                 total_count += count
@@ -364,7 +290,7 @@ class Game:
             self.solver.add_clause([-self.cell_to_variable(i, j, "T") if field == "sea" else -self.cell_to_variable(i, j, "S")])
 
     def make_decision(self) -> Tuple[str, Tuple]:
-        if self.height * self.width > 2000:
+        if self.height * self.width > 5000:
             chord = self.make_chord_move()
             if chord[0]:
                 return 'chord', chord[1]
@@ -378,6 +304,9 @@ class Game:
             chord = self.make_chord_move()
             if chord[0]:
                 return 'chord', chord[1]
+        for key in animals:
+            if comb(self.height * self.width, self.infos[key]['count'] - self.infos[key]['guess']) < 100000:
+                self.solver.add_clauses(self.create_rule_animal_remaining(key, self.infos[key]['count'] - self.infos[key]['guess']))
         discover = self.make_discover_move()
         if discover[0]:
             return 'discover', discover[1]
