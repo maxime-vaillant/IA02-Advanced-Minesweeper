@@ -1,9 +1,8 @@
 import itertools
-import subprocess
 from math import comb
-from sys import platform
 from typing import List, Tuple, Dict
 import pycryptosat as pysat
+import random
 
 # F: Free, T: Tiger, S: Shark, C: Crocodile
 values_list = ["F", "T", "S", "C"]
@@ -164,19 +163,20 @@ class Game:
                     cells.append(self.cell_to_variable(i, j, animal))
         return self.exact(cells, param)
 
+    def filter_discover(self, item) -> bool:
+        i, j = item
+        cell = self.board[i][j]
+        return cell['prox_count'] and sum(cell['known_count'].values()) != len(cell['near_cells'])
+
     def filter_chord(self, item) -> bool:
         i, j = item
         cell = self.board[i][j]
-        if cell['prox_count'] and sum(cell['prox_count']) == sum(cell['known_count'].values()) - cell['known_count']['F'] and sum(cell['known_count'].values()) != len(cell['near_cells']):
-            return True
-        return False
+        return cell['prox_count'] and sum(cell['prox_count']) == sum(cell['known_count'].values()) - cell['known_count']['F'] and sum(cell['known_count'].values()) != len(cell['near_cells'])
 
     def filter_guess(self, item) -> bool:
         i, j = item
         cell = self.board[i][j]
-        if cell['type'] == '?' and cell['field'] != '?':
-            return True
-        return False
+        return cell['type'] == '?' and cell['field'] != '?'
 
     def make_guess_move(self) -> Tuple[bool, Tuple]:
         if len(self.guest_moves) > 0:
@@ -215,42 +215,44 @@ class Game:
         return False, ()
 
     def make_random_move(self) -> Tuple[bool, Tuple]:
-        # sea_probability = (0 if self.infos["S"]["count"] == self.infos["S"]["guess"] else 1) if self.infos["sea"]["count"] == self.infos["sea"]["found"] else (self.infos["S"]["count"] - self.infos["S"]["guess"]) / (self.infos["sea"]["count"] - self.infos["sea"]["found"])
-        # land_probability = (0 if self.infos["T"]["count"] == self.infos["T"]["guess"] else 1) if self.infos["land"]["count"] == self.infos["land"]["found"] else (self.infos["T"]["count"] - self.infos["T"]["guess"]) / (self.infos["land"]["count"] - self.infos["land"]["found"])
-        # case_to_land = "sea" if sea_probability < land_probability else "land"
-        total_animal_found = 0
-        total_animal = 0
+        sea_probability = (0 if self.infos["S"]["count"] == self.infos["S"]["guess"] else 1) if self.infos["sea"]["count"] == self.infos["sea"]["found"] else (self.infos["S"]["count"] - self.infos["S"]["guess"]) / (self.infos["sea"]["count"] - self.infos["sea"]["found"])
+        land_probability = (0 if self.infos["T"]["count"] == self.infos["T"]["guess"] else 1) if self.infos["land"]["count"] == self.infos["land"]["found"] else (self.infos["T"]["count"] - self.infos["T"]["guess"]) / (self.infos["land"]["count"] - self.infos["land"]["found"])
+        probability, moves = [], []
+        total_animal_found, total_animal = 0, 0
+        min_animals = 0
         for key in self.infos:
-            if key in ['T', 'S', 'C']:
+            if key in animals:
                 total_animal_found += self.infos[key]['guess']
                 total_animal += self.infos[key]['count']
-        random_move = []
-        unsafe_move = []
-        # TODO: Improve this part
+        for c in filter(self.filter_discover, self.visitedCells):
+            cell = self.board[c[0]][c[1]]
+            t = cell['prox_count'][0] - cell['known_count']['T']
+            s = cell['prox_count'][1] - cell['known_count']['S']
+            c = cell['prox_count'][2] - cell['known_count']['C']
+            min_animals += t + s + c
+            unknown_count = len(cell['near_cells']) - sum(cell['known_count'].values())
+            prob = (t + s + c) / unknown_count
+            for (i, j) in cell['near_cells']:
+                if self.board[i][j]['type'] == '?':
+                    probability.append((i, j, prob))
+        probability.sort(key=lambda x: x[2])
+        unknown = []
         for i in range(self.height):
             for j in range(self.width):
-                if self.board[i][j]['type'] == '?':
-                    if self.board[i][j]['field'] == "sea":
-                        self.refresh_guess = True
-                        return True, (i, j)
-                    elif self.board[i][j]['field'] == '?':
-                        random_move.append((i, j))
-                    else:
-                        unsafe_move.append((i, j))
-        if len(random_move) > 0:
-            self.refresh_guess = True
-            return True, random_move[0]
-        elif len(unsafe_move) > 0:
-            self.refresh_guess = True
-            return True, unsafe_move[0]
-        return False, ()
+                if [i, j] not in self.visitedCells:
+                    unknown.append((i, j))
+        unknown_probability = 1 if len(unknown) == 0 else (total_animal - min_animals - total_animal_found) / len(unknown)
+        print(probability, unknown_probability)
+        if probability[0][2] > unknown_probability:
+            return True, random.choice(unknown)
+        for p in probability:
+            if p[2] == probability[0][2]:
+                moves.append(p)
+        return True, random.choice(moves)
 
     def add_information_constraints(self, data: Dict):
         i, j = data['pos']
         field = data['field']
-        # Increment field count if new cell discovered
-        if self.board[i][j]['field'] == '?':
-            self.infos[field]['found'] += 1
         self.board[i][j]['field'] = field
         proximity_count = data.get('prox_count', None)
         guess_animal = data.get('animal', None)
@@ -263,7 +265,10 @@ class Game:
                 self.board[cell[0]][cell[1]]['known_count'][guess_animal] += 1
         elif proximity_count:
             if [i, j] not in self.visitedCells:
+                self.visitedCells.append([i, j])
                 self.solver.add_clause([-self.cell_to_variable(i, j, "T") if field == "sea" else -self.cell_to_variable(i, j, "S")])
+            # Increment field count if new cell discovered
+            self.infos[field]['found'] += 1
             self.board[i][j]['type'] = 'F'
             self.board[i][j]['prox_count'] = proximity_count
             self.solver.add_clause([self.cell_to_variable(i, j, 'F')])
@@ -307,6 +312,7 @@ class Game:
         for key in animals:
             if comb(self.height * self.width, self.infos[key]['count'] - self.infos[key]['guess']) < 100000:
                 self.solver.add_clauses(self.create_rule_animal_remaining(key, self.infos[key]['count'] - self.infos[key]['guess']))
+        self.refresh_guess = True
         discover = self.make_discover_move()
         if discover[0]:
             return 'discover', discover[1]
