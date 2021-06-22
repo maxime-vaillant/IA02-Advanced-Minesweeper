@@ -2,6 +2,7 @@ import itertools
 import subprocess
 from sys import platform
 from typing import List, Tuple, Dict
+import pycryptosat as pysat
 
 # F: Free, T: Tiger, S: Shark, C: Crocodile
 values_list = ["F", "T", "S", "C"]
@@ -25,6 +26,7 @@ class Game:
         Default constructor
         :param filename: name of the cnf file
         """
+        self.solver = pysat.Solver()
         self.width = width
         self.height = height
         self.file = filename
@@ -239,27 +241,25 @@ class Game:
             return True
         return False
 
+    def filter_guess(self, item) -> bool:
+        i, j = item
+        cell = self.board[i][j]
+        if cell['type'] == '?' and cell['field'] != '?':
+            return True
+        return False
+
     def make_guess_move(self) -> Tuple[bool, Tuple]:
         if len(self.guest_moves) > 0:
             return True, self.guest_moves.pop(0)
         if self.refresh_guess:
             self.refresh_guess = False
-            if self.height * self.width > 1000:
-                self.remove_useless_clauses()
-            # Find a model
-            self.write_dimacs_file(self.clauses_to_dimacs(self.clauses, self.height * self.width * length))
-            self.response = self.exec_gophersat()
-            if self.response[0]:
-                for var in self.response[1]:
-                    if var > 0:
-                        cell = self.variable_to_cell(var)
-                        if [cell[0], cell[1]] in self.last_cells_visited and cell[2] != 'F' and self.board[cell[0]][cell[1]]['type'] == '?':
-                            # Try to deduct with UNSAT
-                            self.write_dimacs_file(
-                                self.clauses_to_dimacs(self.clauses + [[-var]], self.height * self.width * length))
-                            deduction = self.exec_gophersat()
-                            if not deduction[0]:
-                                self.guest_moves.append(cell)
+            for var in range(1, self.height*self.width*length+1):
+                cell = self.variable_to_cell(var)
+                if [cell[0], cell[1]] in self.last_cells_visited and cell[2] != 'F' and self.board[cell[0]][cell[1]]['type'] == '?':
+                    # Try to deduct with UNSAT
+                    deduction = self.solver.solve([-var])
+                    if not deduction[0]:
+                        self.guest_moves.append(cell)
             self.last_cells_visited.clear()
             if len(self.guest_moves) > 0:
                 return True, self.guest_moves.pop(0)
@@ -274,17 +274,14 @@ class Game:
         return False, ()
 
     def make_discover_move(self) -> Tuple[bool, Tuple]:
-        if self.response[0]:
-            for var in self.response[1]:
-                if var > 0:
-                    cell = self.variable_to_cell(var)
-                    if cell[2] == 'F' and self.board[cell[0]][cell[1]]['type'] == '?':
-                        # Try to deduct with UNSAT
-                        self.write_dimacs_file(
-                            self.clauses_to_dimacs(self.clauses + [[-var]], self.height * self.width * length))
-                        deduction = self.exec_gophersat()
-                        if not deduction[0]:
-                            return True, cell
+        for var in range(1, self.height*self.width*length+1):
+            if var > 0:
+                cell = self.variable_to_cell(var)
+                if cell[2] == 'F' and self.board[cell[0]][cell[1]]['type'] == '?':
+                    # Try to deduct with UNSAT
+                    deduction = self.solver.solve([-var])
+                    if not deduction[0]:
+                        return True, cell
         return False, ()
 
     def make_random_move(self) -> Tuple[bool, Tuple]:
@@ -335,21 +332,21 @@ class Game:
             for cell in self.board[i][j]['near_cells']:
                 self.board[cell[0]][cell[1]]['known_count'][guess_animal] += 1
             if self.infos[guess_animal]['count'] - self.infos[guess_animal]['guess'] == 1:
-                self.clauses += self.create_rule_animal_remaining(guess_animal, 1)
+                self.solver.add_clauses(self.create_rule_animal_remaining(guess_animal, 1))
                 self.refresh_guess = True
         elif proximity_count:
             if [i, j] not in self.visitedCells:
-                self.clauses.append([-self.cell_to_variable(i, j, "T") if field == "sea" else -self.cell_to_variable(i, j, "S")])
+                self.solver.add_clause([-self.cell_to_variable(i, j, "T") if field == "sea" else -self.cell_to_variable(i, j, "S")])
             self.board[i][j]['type'] = 'F'
             self.board[i][j]['prox_count'] = proximity_count
-            self.clauses.append([self.cell_to_variable(i, j, 'F')])
+            self.solver.add_clause([self.cell_to_variable(i, j, 'F')])
             near_cells = self.board[i][j]['near_cells']
             for cell in near_cells:
                 self.last_cells_visited.append(cell)
                 self.board[cell[0]][cell[1]]['known_count']['F'] += 1
                 if cell not in self.visitedCells:
                     self.visitedCells.insert(0, cell)
-                    self.clauses += self.create_rule_on_cell(cell[0], cell[1])
+                    self.solver.add_clauses(self.create_rule_on_cell(cell[0], cell[1]))
             animals = ("T", "S", "C")
             total_count = 0
             for index, count in enumerate(proximity_count):
@@ -358,13 +355,13 @@ class Game:
                 animal = animals[index]
                 for cell in near_cells:
                     cells.append(self.cell_to_variable(cell[0], cell[1], animal))
-                self.clauses += self.exact(cells, count)
+                self.solver.add_clauses(self.exact(cells, count))
             cells = []
             for cell in near_cells:
                 cells.append(self.cell_to_variable(cell[0], cell[1], "F"))
-            self.clauses += self.exact(cells, len(near_cells) - total_count)
+            self.solver.add_clauses(self.exact(cells, len(near_cells) - total_count))
         else:
-            self.clauses.append([-self.cell_to_variable(i, j, "T") if field == "sea" else -self.cell_to_variable(i, j, "S")])
+            self.solver.add_clause([-self.cell_to_variable(i, j, "T") if field == "sea" else -self.cell_to_variable(i, j, "S")])
 
     def make_decision(self) -> Tuple[str, Tuple]:
         if self.height * self.width > 2000:
