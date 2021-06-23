@@ -170,7 +170,8 @@ class Game:
     def filter_chord(self, item) -> bool:
         i, j = item
         cell = self.board[i][j]
-        return cell['prox_count'] and sum(cell['prox_count']) == sum(cell['known_count'].values()) - cell['known_count']['F'] and sum(cell['known_count'].values()) != len(cell['near_cells'])
+        return cell['prox_count'] and sum(cell['prox_count']) == sum(cell['known_count'].values()) - \
+               cell['known_count']['F'] and sum(cell['known_count'].values()) != len(cell['near_cells'])
 
     def filter_guess(self, item) -> bool:
         i, j = item
@@ -182,9 +183,10 @@ class Game:
             return True, self.guest_moves.pop(0)
         if self.refresh_guess:
             self.refresh_guess = False
-            for var in range(1, self.height*self.width*length+1):
+            for var in range(1, self.height * self.width * length + 1):
                 cell = self.variable_to_cell(var)
-                if [cell[0], cell[1]] in self.last_cells_visited and cell[2] != 'F' and self.board[cell[0]][cell[1]]['type'] == '?':
+                if [cell[0], cell[1]] in self.last_cells_visited and cell[2] != 'F' and self.board[cell[0]][cell[1]][
+                    'type'] == '?':
                     # Try to deduct with UNSAT
                     deduction = self.solver.solve([-var])
                     if not deduction[0]:
@@ -196,14 +198,15 @@ class Game:
 
     def make_chord_move(self) -> Tuple[bool, Tuple]:
         chord_moves = list(filter(self.filter_chord, self.visitedCells))
-        chord_moves.sort(key=lambda x: sum(self.board[x[0]][x[1]]['known_count'].values()) - len(self.board[x[0]][x[1]]['near_cells']))
+        chord_moves.sort(key=lambda x: sum(self.board[x[0]][x[1]]['known_count'].values()) - len(
+            self.board[x[0]][x[1]]['near_cells']))
         if len(chord_moves) > 0:
             self.refresh_guess = True
             return True, chord_moves[0]
         return False, ()
 
     def make_discover_move(self) -> Tuple[bool, Tuple]:
-        for var in range(1, self.height*self.width*length+1):
+        for var in range(1, self.height * self.width * length + 1):
             if var > 0:
                 cell = self.variable_to_cell(var)
                 if cell[2] == 'F' and self.board[cell[0]][cell[1]]['type'] == '?':
@@ -251,17 +254,25 @@ class Game:
                 probability = 0
                 for p in probability_infos:
                     if cell in p['near_cells_unknown']:
-                        probability = max(p['sea_probability'] if self.board[cell[0]][cell[1]]['field'] == 'sea' else p['land_probability'], probability)
+                        probability = max(p['sea_probability'] if self.board[cell[0]][cell[1]]['field'] == 'sea' else p[
+                            'land_probability'], probability)
 
     def make_random_move(self) -> Tuple[bool, Tuple]:
+        self.proba_optimize()
         probability, moves = [], []
         total_animal_found, total_animal = 0, 0
         for key in self.infos:
             if key in animals:
                 total_animal_found += self.infos[key]['guess']
                 total_animal += self.infos[key]['count']
+        print('anim')
+        print(total_animal)
+        print('nbAnimFound')
+        print(total_animal_found)
         for c in filter(self.filter_discover, self.visitedCells):
             cell = self.board[c[0]][c[1]]
+            print('Near')
+            print(cell['near_cells'])
             field_count = {
                 'sea': 0,
                 'land': 0
@@ -282,22 +293,33 @@ class Game:
                     else:
                         prob = t / field_count['land'] + c / (unknown_count - t)
                         probability.append([i, j, prob])
-        known = []
+        print('Probability')
+        print(probability)
+        known = {}
         for i in range(len(probability)):
-            for j in range(i+1, len(probability)):
+            for j in range(i + 1, len(probability)):
+                print(known)
                 if probability[i][0] == probability[j][0] and probability[i][1] == probability[j][1]:
                     if probability[i][2] > probability[j][2]:
                         probability[j][2] = probability[i][2]
                     else:
                         probability[i][2] = probability[j][2]
-            if (probability[i][0], probability[i][1], probability[i][2]) not in known:
-                known.append((probability[i][0], probability[i][1], probability[i][2]))
-        known.sort(key=lambda x: x[2])
+            print(known)
+            if (probability[i][0], probability[i][1]) not in known:
+                known[(probability[i][0], probability[i][1])] = probability[i][2]
+            elif known[(probability[i][0], probability[i][1])] < probability[i][2]:
+                known[(probability[i][0], probability[i][1])] = probability[i][2]
+        print('Known')
+        print(known)
         unknown = []
         for i in range(self.height):
             for j in range(self.width):
                 if [i, j] not in self.visitedCells:
                     unknown.append((i, j))
+        print('Unknown')
+        print(unknown)
+        print('Moves')
+        print(moves)
         unknown_probability = 1 if len(unknown) == 0 else (total_animal - total_animal_found) / len(unknown)
         if len(probability) > 0:
             if probability[0][2] < unknown_probability:
@@ -305,7 +327,48 @@ class Game:
                     if p[2] == probability[0][2]:
                         moves.append(p)
                 return True, random.choice(moves)
+        print('Unknown_probability')
+        print(unknown_probability)
+
         return True, random.choice(unknown)
+
+    def proba_optimize(self) -> Tuple[bool, Tuple]:
+        cellsBorder = {}
+        for c in filter(self.filter_discover, self.visitedCells):
+            cell = self.board[c[0]][c[1]]
+            for (i, j) in cell['near_cells']:
+                if self.board[i][j]['type'] == '?':
+                    cellsBorder[(i, j)] = 0
+        for positionBorder in cellsBorder:
+            for nearCell in self.board[positionBorder[0]][positionBorder[1]]['near_cells']:
+                if self.board[nearCell[0]][nearCell[1]]['type'] == 'F':
+                    if self.board[nearCell[0]][nearCell[1]]['prox_count'][0] != \
+                            self.board[nearCell[0]][nearCell[1]]['known_count']['T']:
+                        if self.board[nearCell[0]][nearCell[1]]['field'] == 'land':
+                            cellsBorder[(positionBorder[0], positionBorder[1])] += 1 / len(cellsBorder)
+                    if self.board[nearCell[0]][nearCell[1]]['prox_count'][1] != \
+                            self.board[nearCell[0]][nearCell[1]]['known_count']['S']:
+                        if self.board[nearCell[0]][nearCell[1]]['field'] == 'sea':
+                            cellsBorder[(positionBorder[0], positionBorder[1])] += 1 / len(cellsBorder)
+                    if self.board[nearCell[0]][nearCell[1]]['prox_count'][2] != \
+                            self.board[nearCell[0]][nearCell[1]]['known_count']['C']:
+                        cellsBorder[(positionBorder[0], positionBorder[1])] += 1 / len(cellsBorder)
+        unknown = []
+        for i in range(self.height):
+            for j in range(self.width):
+                if [i, j] not in self.visitedCells:
+                    unknown.append((i, j))
+        total_animal_found, total_animal = 0, 0
+        for key in self.infos:
+            if key in animals:
+                total_animal_found += self.infos[key]['guess']
+                total_animal += self.infos[key]['count']
+        reste = (total_animal-total_animal_found) - sum(cellsBorder.values())
+        for unk in unknown:
+            cellsBorder[unk[0],unk[1]] = reste / len(unknown)
+        print('Coup aléatoire, est-ce que les calculs sont bon Kevin?')
+        print(cellsBorder)
+        return True, min(cellsBorder)
 
     def add_information_constraints(self, data: Dict):
         i, j = data['pos']
@@ -323,7 +386,8 @@ class Game:
         elif proximity_count:
             if [i, j] not in self.visitedCells:
                 self.visitedCells.append([i, j])
-                self.solver.add_clause([-self.cell_to_variable(i, j, "T") if field == "sea" else -self.cell_to_variable(i, j, "S")])
+                self.solver.add_clause(
+                    [-self.cell_to_variable(i, j, "T") if field == "sea" else -self.cell_to_variable(i, j, "S")])
             # Increment field count if new cell discovered
             self.infos[field]['found'] += 1
             self.board[i][j]['type'] = 'F'
@@ -349,7 +413,8 @@ class Game:
                 cells.append(self.cell_to_variable(cell[0], cell[1], "F"))
             self.solver.add_clauses(self.exact(cells, len(near_cells) - total_count))
         else:
-            self.solver.add_clause([-self.cell_to_variable(i, j, "T") if field == "sea" else -self.cell_to_variable(i, j, "S")])
+            self.solver.add_clause(
+                [-self.cell_to_variable(i, j, "T") if field == "sea" else -self.cell_to_variable(i, j, "S")])
 
     def make_decision(self) -> Tuple[str, Tuple]:
         if self.height * self.width > 5000:
@@ -366,9 +431,11 @@ class Game:
             chord = self.make_chord_move()
             if chord[0]:
                 return 'chord', chord[1]
+        print(guess)
         for key in animals:
             if comb(self.height * self.width, self.infos[key]['count'] - self.infos[key]['guess']) < 100000:
-                self.solver.add_clauses(self.create_rule_animal_remaining(key, self.infos[key]['count'] - self.infos[key]['guess']))
+                self.solver.add_clauses(
+                    self.create_rule_animal_remaining(key, self.infos[key]['count'] - self.infos[key]['guess']))
             guess = self.make_guess_move()
             if guess[0]:
                 return 'guess', guess[1]
@@ -376,6 +443,6 @@ class Game:
         discover = self.make_discover_move()
         if discover[0]:
             return 'discover', discover[1]
-        random = self.make_random_move()
+        random = self.proba_optimize()
         if random[0]:
             return 'discover', random[1]
