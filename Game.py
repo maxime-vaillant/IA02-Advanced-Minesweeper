@@ -368,7 +368,7 @@ class Game:
             cellsBorder[unk[0],unk[1]] = reste / len(unknown)
         print('Coup aléatoire, est-ce que les calculs sont bon Kevin?')
         print(cellsBorder)
-        return True, min(cellsBorder)
+        return True, min(cellsBorder.keys(), key=(lambda k: cellsBorder[k]))
 
     def add_information_constraints(self, data: Dict):
         i, j = data['pos']
