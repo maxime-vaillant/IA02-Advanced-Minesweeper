@@ -207,72 +207,29 @@ class Game:
 
     def make_discover_move(self) -> Tuple[bool, Tuple]:
         for var in range(1, self.height * self.width * length + 1):
-            if var > 0:
-                cell = self.variable_to_cell(var)
-                if cell[2] == 'F' and self.board[cell[0]][cell[1]]['type'] == '?':
-                    # Try to deduct with UNSAT
-                    deduction = self.solver.solve([-var])
-                    if not deduction[0]:
-                        return True, cell
+            cell = self.variable_to_cell(var)
+            if cell[2] == 'F' and self.board[cell[0]][cell[1]]['type'] == '?' and [cell[0], cell[1]] in self.visitedCells:
+                # Try to deduct with UNSAT
+                deduction = self.solver.solve([-var])
+                if not deduction[0]:
+                    return True, cell
         return False, ()
 
-    def make_random_move_bis(self) -> Tuple[bool, Tuple]:
-        probability, moves = [], []
-        total_animal_found, total_animal = 0, 0
-        probability_infos = []
-        all_near_cells_unknown = []
-        for key in self.infos:
-            if key in animals:
-                total_animal_found += self.infos[key]['guess']
-                total_animal += self.infos[key]['count']
-        for v in filter(self.filter_discover, self.visitedCells):
-            cell = self.board[v[0]][v[1]]
-            field_count = {
-                'sea': 0,
-                'land': 0
-            }
-            t = cell['prox_count'][0] - cell['known_count']['T']
-            s = cell['prox_count'][1] - cell['known_count']['S']
-            c = cell['prox_count'][2] - cell['known_count']['C']
-            unknown_count = len(cell['near_cells']) - sum(cell['known_count'].values())
-            near_cells_unknown = []
-            for (i, j) in cell['near_cells']:
-                if self.board[i][j]['type'] == '?':
-                    near_cells_unknown.append((i, j))
-                    if (i, j) not in all_near_cells_unknown:
-                        all_near_cells_unknown.append((i, j))
-                    field = self.board[i][j]['field']
-                    field_count[field] += 1
-            probability_infos.append({
-                'pos': c,
-                'prox': t + s + c,
-                'near_cells_unknown': near_cells_unknown,
-                'sea_probability': s / field_count['sea'] + c / (unknown_count - s),
-                'land_probability': t / field_count['land'] + c / (unknown_count - t)
-            })
-            for cell in all_near_cells_unknown:
-                probability = 0
-                for p in probability_infos:
-                    if cell in p['near_cells_unknown']:
-                        probability = max(p['sea_probability'] if self.board[cell[0]][cell[1]]['field'] == 'sea' else p[
-                            'land_probability'], probability)
-
     def make_random_move(self) -> Tuple[bool, Tuple]:
-        self.proba_optimize()
         probability, moves = [], []
         total_animal_found, total_animal = 0, 0
+        animals_remaining = {
+            'T': 0,
+            'S': 0,
+            'C': 0
+        }
         for key in self.infos:
             if key in animals:
+                animals_remaining[key] = self.infos[key]['count'] - self.infos[key]['guess']
                 total_animal_found += self.infos[key]['guess']
                 total_animal += self.infos[key]['count']
-        print('anim')
-        print(total_animal)
-        print('nbAnimFound')
-        print(total_animal_found)
         for c in filter(self.filter_discover, self.visitedCells):
             cell = self.board[c[0]][c[1]]
-            print('Near')
-            print(cell['near_cells'])
             field_count = {
                 'sea': 0,
                 'land': 0
@@ -288,48 +245,56 @@ class Game:
             for (i, j) in cell['near_cells']:
                 if self.board[i][j]['type'] == '?':
                     if self.board[i][j]['field'] == 'sea':
-                        prob = s / field_count['sea'] + c / (unknown_count - s)
+                        prob = s / field_count['sea'] + c / unknown_count
                         probability.append([i, j, prob])
                     else:
-                        prob = t / field_count['land'] + c / (unknown_count - t)
+                        prob = t / field_count['land'] + c / unknown_count
                         probability.append([i, j, prob])
-        print('Probability')
-        print(probability)
-        known = {}
+        new_probability = []
         for i in range(len(probability)):
             for j in range(i + 1, len(probability)):
-                print(known)
                 if probability[i][0] == probability[j][0] and probability[i][1] == probability[j][1]:
                     if probability[i][2] > probability[j][2]:
                         probability[j][2] = probability[i][2]
                     else:
                         probability[i][2] = probability[j][2]
-            print(known)
-            if (probability[i][0], probability[i][1]) not in known:
-                known[(probability[i][0], probability[i][1])] = probability[i][2]
-            elif known[(probability[i][0], probability[i][1])] < probability[i][2]:
-                known[(probability[i][0], probability[i][1])] = probability[i][2]
-        print('Known')
-        print(known)
+            if probability[i] not in new_probability:
+                new_probability.append(probability[i])
         unknown = []
+        unknown_count = 0
         for i in range(self.height):
             for j in range(self.width):
-                if [i, j] not in self.visitedCells:
-                    unknown.append((i, j))
-        print('Unknown')
-        print(unknown)
-        print('Moves')
-        print(moves)
-        unknown_probability = 1 if len(unknown) == 0 else (total_animal - total_animal_found) / len(unknown)
-        if len(probability) > 0:
-            if probability[0][2] < unknown_probability:
-                for p in probability:
-                    if p[2] == probability[0][2]:
+                if self.board[i][j]['type'] == '?':
+                    unknown_count += 1
+                    if self.board[i][j]['field'] == '?':
+                        unknown.append((i, j))
+        new_probability.sort(key=lambda x: x[2])
+        unknown_probability = (total_animal - total_animal_found) / unknown_count if len(unknown) > 0 else 1
+        print(new_probability, unknown_probability, unknown)
+        if len(new_probability) > 0:
+            if new_probability[0][2] < unknown_probability:
+                for p in new_probability:
+                    if p[2] == new_probability[0][2]:
                         moves.append(p)
                 return True, random.choice(moves)
-        print('Unknown_probability')
-        print(unknown_probability)
-
+            elif new_probability[0][2] == unknown_probability:
+                for p in new_probability:
+                    if p[2] == new_probability[0][2]:
+                        moves.append(p)
+                if unknown_probability != 1:
+                    return True, random.choice(moves+unknown)
+                else:
+                    move = random.choice(moves)
+                    best_guess = []
+                    max_remaining = 0
+                    for key in animals:
+                        if animals_remaining[key] > max_remaining:
+                            max_remaining = animals_remaining[key]
+                            best_guess.clear()
+                            best_guess.append(key)
+                        elif animals_remaining[key] == max_remaining:
+                            best_guess.append(key)
+                    return False, (move[0], move[1], random.choice(best_guess))
         return True, random.choice(unknown)
 
     def proba_optimize(self) -> Tuple[bool, Tuple]:
@@ -365,7 +330,7 @@ class Game:
                 total_animal += self.infos[key]['count']
         reste = (total_animal-total_animal_found) - sum(cellsBorder.values())
         for unk in unknown:
-            cellsBorder[unk[0],unk[1]] = reste / len(unknown)
+            cellsBorder[unk[0], unk[1]] = reste / len(unknown)
         print('Coup aléatoire, est-ce que les calculs sont bon Kevin?')
         print(cellsBorder)
         return True, min(cellsBorder.keys(), key=(lambda k: cellsBorder[k]))
@@ -431,7 +396,6 @@ class Game:
             chord = self.make_chord_move()
             if chord[0]:
                 return 'chord', chord[1]
-        print(guess)
         for key in animals:
             if comb(self.height * self.width, self.infos[key]['count'] - self.infos[key]['guess']) < 100000:
                 self.solver.add_clauses(
@@ -443,6 +407,8 @@ class Game:
         discover = self.make_discover_move()
         if discover[0]:
             return 'discover', discover[1]
-        random = self.proba_optimize()
-        if random[0]:
-            return 'discover', random[1]
+        probability = self.make_random_move()
+        if probability[0]:
+            return 'discover', probability[1]
+        else:
+            return 'guess', probability[1]
