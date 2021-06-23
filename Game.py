@@ -215,8 +215,6 @@ class Game:
         return False, ()
 
     def make_random_move(self) -> Tuple[bool, Tuple]:
-        sea_probability = (0 if self.infos["S"]["count"] == self.infos["S"]["guess"] else 1) if self.infos["sea"]["count"] == self.infos["sea"]["found"] else (self.infos["S"]["count"] - self.infos["S"]["guess"]) / (self.infos["sea"]["count"] - self.infos["sea"]["found"])
-        land_probability = (0 if self.infos["T"]["count"] == self.infos["T"]["guess"] else 1) if self.infos["land"]["count"] == self.infos["land"]["found"] else (self.infos["T"]["count"] - self.infos["T"]["guess"]) / (self.infos["land"]["count"] - self.infos["land"]["found"])
         probability, moves = [], []
         total_animal_found, total_animal = 0, 0
         min_animals = 0
@@ -226,29 +224,51 @@ class Game:
                 total_animal += self.infos[key]['count']
         for c in filter(self.filter_discover, self.visitedCells):
             cell = self.board[c[0]][c[1]]
+            field_count = {
+                'sea': 0,
+                'land': 0
+            }
             t = cell['prox_count'][0] - cell['known_count']['T']
             s = cell['prox_count'][1] - cell['known_count']['S']
             c = cell['prox_count'][2] - cell['known_count']['C']
             min_animals += t + s + c
             unknown_count = len(cell['near_cells']) - sum(cell['known_count'].values())
-            prob = (t + s + c) / unknown_count
             for (i, j) in cell['near_cells']:
                 if self.board[i][j]['type'] == '?':
-                    probability.append((i, j, prob))
-        probability.sort(key=lambda x: x[2])
+                    field = self.board[i][j]['field']
+                    field_count[field] += 1
+            for (i, j) in cell['near_cells']:
+                if self.board[i][j]['type'] == '?':
+                    if self.board[i][j]['field'] == 'sea':
+                        prob = s / field_count['sea'] + c / (unknown_count - s)
+                        probability.append([i, j, prob])
+                    else:
+                        prob = t / field_count['land'] + c / (unknown_count - t)
+                        probability.append([i, j, prob])
+        known = []
+        for i in range(len(probability)):
+            for j in range(i+1, len(probability)):
+                if probability[i][0] == probability[j][0] and probability[i][1] == probability[j][1]:
+                    if probability[i][2] > probability[j][2]:
+                        probability[j][2] = probability[i][2]
+                    else:
+                        probability[i][2] = probability[j][2]
+            if (probability[i][0], probability[i][1], probability[i][2]) not in known:
+                known.append((probability[i][0], probability[i][1], probability[i][2]))
+        known.sort(key=lambda x: x[2])
         unknown = []
         for i in range(self.height):
             for j in range(self.width):
                 if [i, j] not in self.visitedCells:
                     unknown.append((i, j))
         unknown_probability = 1 if len(unknown) == 0 else (total_animal - min_animals - total_animal_found) / len(unknown)
-        print(probability, unknown_probability)
-        if probability[0][2] > unknown_probability:
-            return True, random.choice(unknown)
-        for p in probability:
-            if p[2] == probability[0][2]:
-                moves.append(p)
-        return True, random.choice(moves)
+        if len(probability) > 0:
+            if probability[0][2] < unknown_probability:
+                for p in probability:
+                    if p[2] == probability[0][2]:
+                        moves.append(p)
+                return True, random.choice(moves)
+        return True, random.choice(unknown)
 
     def add_information_constraints(self, data: Dict):
         i, j = data['pos']
@@ -312,6 +332,9 @@ class Game:
         for key in animals:
             if comb(self.height * self.width, self.infos[key]['count'] - self.infos[key]['guess']) < 100000:
                 self.solver.add_clauses(self.create_rule_animal_remaining(key, self.infos[key]['count'] - self.infos[key]['guess']))
+            guess = self.make_guess_move()
+            if guess[0]:
+                return 'guess', guess[1]
         self.refresh_guess = True
         discover = self.make_discover_move()
         if discover[0]:
