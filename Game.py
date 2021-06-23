@@ -66,7 +66,6 @@ class Game:
             }
         }
         self.visitedCells = []
-        self.clauses = []
         self.guest_moves = []
         self.response = []
         self.last_cells_visited = []
@@ -214,10 +213,49 @@ class Game:
                         return True, cell
         return False, ()
 
+    def make_random_move_bis(self) -> Tuple[bool, Tuple]:
+        probability, moves = [], []
+        total_animal_found, total_animal = 0, 0
+        probability_infos = []
+        all_near_cells_unknown = []
+        for key in self.infos:
+            if key in animals:
+                total_animal_found += self.infos[key]['guess']
+                total_animal += self.infos[key]['count']
+        for v in filter(self.filter_discover, self.visitedCells):
+            cell = self.board[v[0]][v[1]]
+            field_count = {
+                'sea': 0,
+                'land': 0
+            }
+            t = cell['prox_count'][0] - cell['known_count']['T']
+            s = cell['prox_count'][1] - cell['known_count']['S']
+            c = cell['prox_count'][2] - cell['known_count']['C']
+            unknown_count = len(cell['near_cells']) - sum(cell['known_count'].values())
+            near_cells_unknown = []
+            for (i, j) in cell['near_cells']:
+                if self.board[i][j]['type'] == '?':
+                    near_cells_unknown.append((i, j))
+                    if (i, j) not in all_near_cells_unknown:
+                        all_near_cells_unknown.append((i, j))
+                    field = self.board[i][j]['field']
+                    field_count[field] += 1
+            probability_infos.append({
+                'pos': c,
+                'prox': t + s + c,
+                'near_cells_unknown': near_cells_unknown,
+                'sea_probability': s / field_count['sea'] + c / (unknown_count - s),
+                'land_probability': t / field_count['land'] + c / (unknown_count - t)
+            })
+            for cell in all_near_cells_unknown:
+                probability = 0
+                for p in probability_infos:
+                    if cell in p['near_cells_unknown']:
+                        probability = max(p['sea_probability'] if self.board[cell[0]][cell[1]]['field'] == 'sea' else p['land_probability'], probability)
+
     def make_random_move(self) -> Tuple[bool, Tuple]:
         probability, moves = [], []
         total_animal_found, total_animal = 0, 0
-        min_animals = 0
         for key in self.infos:
             if key in animals:
                 total_animal_found += self.infos[key]['guess']
@@ -231,7 +269,6 @@ class Game:
             t = cell['prox_count'][0] - cell['known_count']['T']
             s = cell['prox_count'][1] - cell['known_count']['S']
             c = cell['prox_count'][2] - cell['known_count']['C']
-            min_animals += t + s + c
             unknown_count = len(cell['near_cells']) - sum(cell['known_count'].values())
             for (i, j) in cell['near_cells']:
                 if self.board[i][j]['type'] == '?':
@@ -261,7 +298,7 @@ class Game:
             for j in range(self.width):
                 if [i, j] not in self.visitedCells:
                     unknown.append((i, j))
-        unknown_probability = 1 if len(unknown) == 0 else (total_animal - min_animals - total_animal_found) / len(unknown)
+        unknown_probability = 1 if len(unknown) == 0 else (total_animal - total_animal_found) / len(unknown)
         if len(probability) > 0:
             if probability[0][2] < unknown_probability:
                 for p in probability:
