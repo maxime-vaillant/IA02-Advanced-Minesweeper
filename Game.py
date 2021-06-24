@@ -281,44 +281,6 @@ class Game:
                     return False, (move[0], move[1], random.choice(best_guess))
         return True, random.choice(all_cells)
 
-    def proba_optimize(self) -> Tuple[bool, Tuple]:
-        cellsBorder = {}
-        for c in filter(self.filter_discover, self.visitedCells):
-            cell = self.board[c[0]][c[1]]
-            for (i, j) in cell['near_cells']:
-                if self.board[i][j]['type'] == '?':
-                    cellsBorder[(i, j)] = 0
-        for positionBorder in cellsBorder:
-            for nearCell in self.board[positionBorder[0]][positionBorder[1]]['near_cells']:
-                if self.board[nearCell[0]][nearCell[1]]['type'] == 'F':
-                    if self.board[nearCell[0]][nearCell[1]]['prox_count'][0] != \
-                            self.board[nearCell[0]][nearCell[1]]['known_count']['T']:
-                        if self.board[nearCell[0]][nearCell[1]]['field'] == 'land':
-                            cellsBorder[(positionBorder[0], positionBorder[1])] += 1 / len(cellsBorder)
-                    if self.board[nearCell[0]][nearCell[1]]['prox_count'][1] != \
-                            self.board[nearCell[0]][nearCell[1]]['known_count']['S']:
-                        if self.board[nearCell[0]][nearCell[1]]['field'] == 'sea':
-                            cellsBorder[(positionBorder[0], positionBorder[1])] += 1 / len(cellsBorder)
-                    if self.board[nearCell[0]][nearCell[1]]['prox_count'][2] != \
-                            self.board[nearCell[0]][nearCell[1]]['known_count']['C']:
-                        cellsBorder[(positionBorder[0], positionBorder[1])] += 1 / len(cellsBorder)
-        unknown = []
-        for i in range(self.height):
-            for j in range(self.width):
-                if [i, j] not in self.visitedCells:
-                    unknown.append((i, j))
-        total_animal_found, total_animal = 0, 0
-        for key in self.infos:
-            if key in animals:
-                total_animal_found += self.infos[key]['guess']
-                total_animal += self.infos[key]['count']
-        reste = (total_animal-total_animal_found) - sum(cellsBorder.values())
-        for unk in unknown:
-            cellsBorder[unk[0], unk[1]] = reste / len(unknown)
-        print('Coup aléatoire, est-ce que les calculs sont bon Kevin?')
-        print(cellsBorder)
-        return True, min(cellsBorder.keys(), key=(lambda k: cellsBorder[k]))
-
     def add_information_constraints(self, data: Dict):
         i, j = data['pos']
         field = data['field']
