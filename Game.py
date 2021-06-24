@@ -125,19 +125,6 @@ class Game:
                     cells.append([a, b])
         return cells
 
-    def get_adjacent_cells(self, i: int, j: int) -> List[List[int]]:
-        """
-        :param i: 0 <= i < self.height
-        :param j: 0 <= j < self.width
-        :return: List of position of adjacent cells
-        """
-        cells = []
-        for a in range(i - 1, i + 2):
-            for b in range(j - 1, j + 2):
-                if 0 <= a < self.height and 0 <= b < self.width and ((a != i and b == j) or (a == i and b != j)):
-                    cells.append([a, b])
-        return cells
-
     def create_rule_on_cell(self, i: int, j: int) -> List[List[int]]:
         """
         :param i: 0 <= i < self.height
