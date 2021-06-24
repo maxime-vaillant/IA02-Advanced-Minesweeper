@@ -216,7 +216,7 @@ class Game:
         return False, ()
 
     def make_random_move(self) -> Tuple[bool, Tuple]:
-        probability, moves = [], []
+        probability, moves, new_probability, unknown, all_cells = [], [], [], [], []
         total_animal_found, total_animal = 0, 0
         animals_remaining = {
             'T': 0,
@@ -250,7 +250,6 @@ class Game:
                     else:
                         prob = t / field_count['land'] + c / unknown_count
                         probability.append([i, j, prob])
-        new_probability = []
         for i in range(len(probability)):
             for j in range(i + 1, len(probability)):
                 if probability[i][0] == probability[j][0] and probability[i][1] == probability[j][1]:
@@ -260,16 +259,14 @@ class Game:
                         probability[i][2] = probability[j][2]
             if probability[i] not in new_probability:
                 new_probability.append(probability[i])
-        unknown = []
-        unknown_count = 0
         for i in range(self.height):
             for j in range(self.width):
                 if self.board[i][j]['type'] == '?':
-                    unknown_count += 1
+                    all_cells.append((i, j))
                     if self.board[i][j]['field'] == '?':
                         unknown.append((i, j))
         new_probability.sort(key=lambda x: x[2])
-        unknown_probability = (total_animal - total_animal_found) / unknown_count if len(unknown) > 0 else 1
+        unknown_probability = (total_animal - total_animal_found) / len(all_cells) if len(unknown) > 0 else 1
         print(new_probability, unknown_probability, unknown)
         if len(new_probability) > 0:
             if new_probability[0][2] < unknown_probability:
@@ -295,7 +292,7 @@ class Game:
                         elif animals_remaining[key] == max_remaining:
                             best_guess.append(key)
                     return False, (move[0], move[1], random.choice(best_guess))
-        return True, random.choice(unknown)
+        return True, random.choice(all_cells)
 
     def proba_optimize(self) -> Tuple[bool, Tuple]:
         cellsBorder = {}
