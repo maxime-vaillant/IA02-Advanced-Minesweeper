@@ -65,10 +65,7 @@ class Game:
                 "count": sea_count
             }
         }
-        self.visitedCells = []
-        self.guest_moves = []
-        self.response = []
-        self.last_cells_visited = []
+        self.visitedCells, self.guest_moves, self.last_cells_visited = [], [], []
         self.refresh_guess = True
 
     def cell_to_variable(self, i: int, j: int, val: str) -> int:
@@ -328,20 +325,12 @@ class Game:
                 [-self.cell_to_variable(i, j, "T") if field == "sea" else -self.cell_to_variable(i, j, "S")])
 
     def make_decision(self) -> Tuple[str, Tuple]:
-        if self.height * self.width > 5000:
-            chord = self.make_chord_move()
-            if chord[0]:
-                return 'chord', chord[1]
-            guess = self.make_guess_move()
-            if guess[0]:
-                return 'guess', guess[1]
-        else:
-            guess = self.make_guess_move()
-            if guess[0]:
-                return 'guess', guess[1]
-            chord = self.make_chord_move()
-            if chord[0]:
-                return 'chord', chord[1]
+        guess = self.make_guess_move()
+        if guess[0]:
+            return 'guess', guess[1]
+        chord = self.make_chord_move()
+        if chord[0]:
+            return 'chord', chord[1]
         for key in animals:
             if comb(self.height * self.width, self.infos[key]['count'] - self.infos[key]['guess']) < 100000:
                 self.solver.add_clauses(
