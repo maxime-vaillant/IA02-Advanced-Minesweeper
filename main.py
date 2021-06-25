@@ -28,21 +28,21 @@ def main():
     members = "Victor et Maxime"
     mine = CrocomineClient(server, group, members)
 
-    DISPLAY = True
+    DISPLAY = False
 
-    total_time = 0
-    total_move = 0
+    # total_time = 0
+    # total_move = 0
 
     ko_count = 0
     gg_count = 0
-    fail = []
+    # fail = []
 
-    count = 0
-    nb_move = 0
+    # count = 0
+    # nb_move = 0
 
     new_grid = create_new_grid(mine)
 
-    start_time_grid = time.time()
+    # start_time_grid = time.time()
 
     end = new_grid[0]
 
@@ -60,11 +60,13 @@ def main():
                     print()
                     print("GG")
                     print("GRID --- %s seconds ---" % (time.time() - start_time_grid))
-                    print("Nombre de coup", nb_move)
+                    # print("Nombre de coup", nb_move)
                     print()
+                else:
+                    print("GG")
 
-                total_time += time.time() - start_time_grid
-                total_move += nb_move
+                # total_time += time.time() - start_time_grid
+                # total_move += nb_move
                 gg_count += 1
 
                 new_grid = create_new_grid(mine)
@@ -74,25 +76,27 @@ def main():
                 if end:
                     game, status, msg, infos, msg_map = new_grid[1]
 
-                    nb_move = 0
+                    # nb_move = 0
                     start_time_grid = time.time()
-                    count += 1
+                    # count += 1
 
                     if DISPLAY:
-                        print(count)
+                        # print(count)
                         print()
             elif status == 'KO':
                 if DISPLAY:
                     print()
                     print("KO")
                     print("GRID --- %s seconds ---" % (time.time() - start_time_grid))
-                    print("Nombre de coup", nb_move)
+                    # print("Nombre de coup", nb_move)
                     print()
+                else:
+                    print("KO")
 
-                total_time += time.time() - start_time_grid
-                total_move += nb_move
+                # total_time += time.time() - start_time_grid
+                # total_move += nb_move
                 ko_count += 1
-                fail.append(msg_map)
+                # fail.append(msg_map)
 
                 new_grid = create_new_grid(mine)
 
@@ -101,15 +105,15 @@ def main():
                 if end:
                     game, status, msg, infos, msg_map = new_grid[1]
 
-                    nb_move = 0
+                    # nb_move = 0
                     start_time_grid = time.time()
-                    count += 1
+                    # count += 1
 
                     if DISPLAY:
-                        print(count)
+                        # print(count)
                         print()
             elif status == 'OK':
-                nb_move += 1
+                # nb_move += 1
                 start_time = time.time()
 
                 for cell in infos:
@@ -133,10 +137,10 @@ def main():
 
     print('WIN:', gg_count)
     print('KO:', ko_count)
-    print('FAILS', fail)
+    # print('FAILS', fail)
     print()
-    print("TEMPS TOTAL", total_time)
-    print("NOMBRE COUP TOTAL", total_move)
+    # print("TEMPS TOTAL", total_time)
+    # print("NOMBRE COUP TOTAL", total_move)
     print('Fin')
 
 

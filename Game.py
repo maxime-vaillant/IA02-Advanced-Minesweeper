@@ -251,7 +251,7 @@ class Game:
                         unknown.append((i, j))
         new_probability.sort(key=lambda x: x[2])
         unknown_probability = (total_animal - total_animal_found) / len(all_cells) if len(unknown) > 0 else 1
-        print(new_probability, unknown_probability, unknown)
+        # print(new_probability, unknown_probability, unknown)
         if len(new_probability) > 0:
             if new_probability[0][2] < unknown_probability:
                 for p in new_probability:

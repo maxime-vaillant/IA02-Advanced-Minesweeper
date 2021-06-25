@@ -2,9 +2,9 @@ import os
 import glob
 from random import randrange, random
 
-WIDTH_MAP = 10
-HEIGHT_MAP = 10
-CHANCE_ANIMAL = 0.1
+WIDTH_MAP = 15
+HEIGHT_MAP = 15
+CHANCE_ANIMAL = 0.15
 ANIMALS = ['S', 'W', 'C', 'T']
 VOID = ['~', '-']
 
