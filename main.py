@@ -23,10 +23,11 @@ def create_new_grid(mine: CrocomineClient) -> Tuple[bool, Tuple]:
 
 
 def main():
-    server = "http://localhost:8000"
-    group = "Group 1"
+    server = "http://croco.lagrue.ninja:80"
+    group = "Groupe 1"
     members = "Victor et Maxime"
-    mine = CrocomineClient(server, group, members)
+    password = "415IMATEAPOTMV"
+    mine = CrocomineClient(server, group, members, password)
 
     DISPLAY = False
 
