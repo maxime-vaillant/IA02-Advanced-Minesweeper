@@ -2,7 +2,7 @@ import itertools
 from math import comb
 from typing import List, Tuple, Dict
 import pycryptosat as pysat
-import random
+from random import choice
 
 # F: Free, T: Tiger, S: Shark, C: Crocodile
 values_list = ["F", "T", "S", "C"]
@@ -257,15 +257,15 @@ class Game:
                 for p in new_probability:
                     if p[2] == new_probability[0][2]:
                         moves.append(p)
-                return True, random.choice(moves)
+                return True, choice(moves)
             elif new_probability[0][2] == unknown_probability:
                 for p in new_probability:
                     if p[2] == new_probability[0][2]:
                         moves.append(p)
                 if unknown_probability != 1:
-                    return True, random.choice(moves+unknown)
+                    return True, choice(moves+unknown)
                 else:
-                    move = random.choice(moves)
+                    move = choice(moves)
                     best_guess = []
                     max_remaining = 0
                     for key in animals:
@@ -275,8 +275,8 @@ class Game:
                             best_guess.append(key)
                         elif animals_remaining[key] == max_remaining:
                             best_guess.append(key)
-                    return False, (move[0], move[1], random.choice(best_guess))
-        return True, random.choice(all_cells)
+                    return False, (move[0], move[1], choice(best_guess))
+        return True, choice(all_cells)
 
     def add_information_constraints(self, data: Dict):
         i, j = data['pos']
