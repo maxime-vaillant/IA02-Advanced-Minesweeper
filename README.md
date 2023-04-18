@@ -1,3 +1,3 @@
-# IA02-projet
+# IA02 Project - Advanced Minesweeper
 
-Final project for the uv IA02
+This project is using a Solver SAT to solve an advanced minesweeper.
